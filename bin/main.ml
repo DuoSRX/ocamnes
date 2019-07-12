@@ -175,10 +175,19 @@ let jsr cpu =
   push_word cpu pc;
   cpu.pc <- address
 
+let branch cpu cond =
+  (* TODO: Figure out some i32 -> u16 magic here *)
+  let byte = load_byte_and_bump_pc cpu in
+  if cond then cpu.pc <- cpu.pc + byte
+
+let bcs cpu = branch cpu cpu.carry
+let bcc cpu = branch cpu (not cpu.carry)
+
 let execute_instruction cpu instruction =
   match instruction with
   | 0xEA -> () (* NOP *)
   | 0x38 -> cpu.carry <- true
+  | 0x18 -> cpu.carry <- false
   | 0xAA -> tax cpu
   | 0x8A -> txa cpu
   | 0xE8 -> inx cpu
@@ -199,6 +208,8 @@ let execute_instruction cpu instruction =
   | 0x84 -> sty cpu (zero_page cpu)
   | 0x4C -> jmp cpu
   | 0x20 -> jsr cpu
+  | 0xB0 -> bcs cpu
+  | 0x90 -> bcc cpu
   | _ -> failwith @@ sprintf "unknown instruction %#04x" instruction
 
 type header = {
@@ -244,13 +255,6 @@ let load_rom_into_memory mem rom =
   (* TODO: Load CHR into PPU *)
   (* Array.blit ~len:rom.headers.chr_size ~src:rom.chr ~src_pos:0 ~dst:cpu.memory ~dst_pos:0 *)
 
-type addressing_mode = Foo | Bar
-
-type instruction = {
-  opcode : int;
-  am : addressing_mode;
-}
-
 let main () =
   let memory = Array.create ~len:0x10000 0 in
   let rom = load_rom in
@@ -263,7 +267,7 @@ let main () =
   cpu.pc <- start;
 
   let cycles = ref 0 in
-  while !cycles < 10 do
+  while !cycles < 30 do
     let instruction = load_next_byte cpu in
     printf "%04X  %02X  A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%d\n" cpu.pc instruction cpu.a cpu.x cpu.y (flags_to_int cpu) cpu.s !cycles;
     cpu.pc <- cpu.pc + 1;
