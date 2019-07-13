@@ -1,3 +1,5 @@
 (executable
  (name      main)
- (libraries core tsdl))
+ (libraries core tsdl)
+ (preprocess
+  (pps ppx_deriving.std)))

@@ -187,4 +187,4 @@ let execute_instruction cpu instruction =
   (* | STX -> stx cpu loc
   | SEC -> cpu.carry <- true
   | NOP -> () *)
-  | _ -> failwith @@ sprintf "Unimplemented instruction %s" (op_to_string instruction.op)
+  | _ -> failwith @@ sprintf "Unimplemented instruction %s" (Instructions.show_instruction instruction.op)
