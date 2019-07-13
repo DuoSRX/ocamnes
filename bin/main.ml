@@ -31,17 +31,25 @@ type cpu = {
   memory : int array;
 }
 
-let load_next_byte cpu = cpu.memory.(cpu.pc)
+let load_byte cpu address = cpu.memory.(address)
+let load_next_byte cpu = load_byte cpu cpu.pc
+
+let load_word cpu address =
+  let a = cpu.memory.(address) in
+  let b = cpu.memory.(address + 1) in
+  a lor b lsl 8
+
+let load_next_word cpu = load_word cpu cpu.pc
 
 let load_byte_and_bump_pc cpu =
-  let byte = cpu.memory.(cpu.pc) in
+  let byte = load_next_byte cpu in
   cpu.pc <- cpu.pc + 1;
   byte
 
 let load_word_and_bump_pc cpu =
-  let a = load_byte_and_bump_pc cpu in
-  let b = load_byte_and_bump_pc cpu in
-  a lor b lsl 8
+  let word = load_next_word cpu in
+  cpu.pc <- cpu.pc + 2;
+  word
 
 let load_word_zero_page cpu address =
   cpu.memory.(address) lor (cpu.memory.(address + 1) lsl 8)
@@ -77,25 +85,28 @@ let flags_to_int cpu =
 
 module Location = struct
   type t =
-    | Accumulator of cpu
-    | Memory of cpu * int
-    | Immediate of cpu
-  let load = function
-    | Accumulator cpu -> cpu.a
-    | Memory (cpu, address) -> cpu.memory.(address)
-    | Immediate cpu -> load_byte_and_bump_pc cpu
-  let store mode value = match mode with
-    | Accumulator cpu -> cpu.a <- value
-    | Memory (cpu, address) -> cpu.memory.(address) <- value
-    | _ -> ()
+    | Accumulator
+    | Memory of int
+    | MemoryW of int
+    | Immediate of int
+  let load cpu = function
+    | Accumulator -> cpu.a
+    | Memory address -> load_byte cpu address
+    | MemoryW address -> load_word cpu address
+    | Immediate value -> value
+  let store cpu value = function
+    | Accumulator -> cpu.a <- value
+    | Memory address -> store_byte cpu address value
+    | MemoryW address -> store_word cpu address value
+    | Immediate _ -> failwith "trying to write to Immediate"
+  let target = function
+    | Accumulator -> None
+    | Memory address -> Some address
+    | MemoryW address -> Some address
+    | Immediate n -> Some n
 end
 
-(* type addressing_mode =
-  | Implicit | Absolute | AbsoluteX | AbsoluteY
-  | ZeroPage | ZeroPageX | ZeroPageY
-  | IndirectX | IndirectY | Immediate *)
-
-(* module AddressingMode = struct
+module AddressingMode = struct
   type t =
     | Implicit | Absolute | AbsoluteX | AbsoluteY
     | ZeroPage | ZeroPageX | ZeroPageY
@@ -105,43 +116,14 @@ end
     | Immediate | ZeroPage | ZeroPageX | ZeroPageY -> 2
     | IndirectX | IndirectY -> 2
     | Absolute | AbsoluteX | AbsoluteY -> 3
-end *)
+end
 
-let immediate cpu = Location.Immediate cpu
-
-let absolute cpu =
-  let address = load_word_and_bump_pc(cpu) in
-  Location.Memory(cpu, address)
-
-let absolute_x cpu =
-  let address = wrapping_add (load_word_and_bump_pc cpu) cpu.x in
-  Location.Memory(cpu, address)
-
-let absolute_y cpu =
-  let address = wrapping_add (load_word_and_bump_pc cpu) cpu.y in
-  Location.Memory(cpu, address)
-
-let zero_page cpu =
-  let address = load_byte_and_bump_pc cpu in
-  Location.Memory(cpu, address)
-
-let zero_page_x cpu =
-  let address = wrapping_add (load_byte_and_bump_pc cpu) cpu.x in
-  Location.Memory(cpu, address)
-
-let zero_page_y cpu =
-  let address = wrapping_add (load_byte_and_bump_pc cpu) cpu.y in
-  Location.Memory(cpu, address)
-
-let indirect_x cpu =
-  let target = wrapping_add (load_byte_and_bump_pc cpu) cpu.x in
-  let address = load_word_zero_page cpu target in
-  Location.Memory(cpu, address)
-
-let indirect_y cpu =
-  let target = load_byte_and_bump_pc cpu in
-  let address = wrapping_add (load_word_zero_page cpu target) cpu.y in
-  Location.Memory(cpu, address)
+let decode_addressing_mode cpu am = match am with
+  | AddressingMode.Immediate -> Location.Immediate (load_next_byte cpu)
+  | AddressingMode.Absolute -> Location.MemoryW (load_next_word cpu)
+  (* | AddressingMode.AbsoluteX -> Location.Memory (wrapping_add (load_next_word cpu) cpu.x)
+  | AddressingMode.AbsoluteY -> Location.Memory (wrapping_add (load_next_word cpu) cpu.x) *)
+  | _ -> failwith "unknown addressing mode"
 
 let set_nz_flags cpu value =
   cpu.zero <- value = 0;
@@ -153,21 +135,23 @@ let txa c = c.x <- set_nz_flags c c.a
 let inx c = c.x <- set_nz_flags c (wrapping_add c.x 1)
 let dex c = c.x <- set_nz_flags c (wrapping_add c.x (-1))
 
-let inc c am =
-  let value = wrapping_add (Location.load(am)) 1 in
-  Location.store(am) ((set_nz_flags c value) land 0xFF)
+let inc cpu loc =
+  let value = wrapping_add (Location.load cpu loc) 1 in
+  Location.store cpu ((set_nz_flags cpu value) land 0xFF) loc
 
-let dec c am =
-  let value = wrapping_add (Location.load(am)) (-1) in
-  Location.store(am) ((set_nz_flags c value) land 0xFF)
+let dec cpu loc =
+  let value = wrapping_add (Location.load cpu loc) (-1) in
+  Location.store cpu ((set_nz_flags cpu value) land 0xFF) loc
 
-let lda c am = c.a <- set_nz_flags c (Location.load(am))
-let ldx c am = c.x <- set_nz_flags c (Location.load(am))
-let sta c am = Location.store(am) c.a
-let stx c am = Location.store(am) c.x
-let sty c am = Location.store(am) c.y
+let lda c loc = c.a <- set_nz_flags c (Location.load c loc)
+let ldx c loc = c.x <- set_nz_flags c (Location.load c loc)
+let sta c loc = Location.store c c.a loc
+let stx c loc = Location.store c c.x loc
+let sty c loc = Location.store c c.y loc
 
-let jmp c = c.pc <- load_word_and_bump_pc c
+let jmp c loc = match (Location.target loc) with
+  | None -> ()
+  | Some(target) -> c.pc <- target
 
 let jsr cpu =
   let address = load_word_and_bump_pc cpu in
@@ -183,7 +167,36 @@ let branch cpu cond =
 let bcs cpu = branch cpu cpu.carry
 let bcc cpu = branch cpu (not cpu.carry)
 
+type op = JMP | LDX
+
+type instruction = {
+  op : op;
+  mode : AddressingMode.t;
+  location : Location.t;
+  cycles : int;
+  size: int;
+}
+
+let decode opcode =
+  match opcode with
+  | 0x4C -> (JMP, AddressingMode.Absolute, 3)
+  | 0xA2 -> (LDX, Immediate, 2)
+  | _ -> failwith @@ sprintf "Unknown opcode %#02x" opcode
+
+(* (instruction, bytes read *)
+let decode_instruction cpu instruction =
+  let (op, mode, cycles) = decode instruction in
+  let location = decode_addressing_mode cpu mode in
+  { op; mode; cycles; location; size = AddressingMode.size mode}
+
 let execute_instruction cpu instruction =
+  (* cpu.pc <- cpu.pc + instruction.size; *)
+  let loc = instruction.location in
+  match instruction.op with
+  | JMP -> jmp cpu loc
+  | _ -> ();
+
+(* let execute_instruction cpu instruction =
   match instruction with
   | 0xEA -> () (* NOP *)
   | 0x38 -> cpu.carry <- true
@@ -210,7 +223,7 @@ let execute_instruction cpu instruction =
   | 0x20 -> jsr cpu
   | 0xB0 -> bcs cpu
   | 0x90 -> bcc cpu
-  | _ -> failwith @@ sprintf "unknown instruction %#04x" instruction
+  | _ -> failwith @@ sprintf "unknown instruction %#04x" instruction *)
 
 type header = {
   prg_size: int;
@@ -268,9 +281,14 @@ let main () =
 
   let cycles = ref 0 in
   while !cycles < 30 do
-    let instruction = load_next_byte cpu in
-    printf "%04X  %02X  A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%d\n" cpu.pc instruction cpu.a cpu.x cpu.y (flags_to_int cpu) cpu.s !cycles;
+    let opcode = load_next_byte cpu in
+    let instruction = decode_instruction cpu opcode in
+    printf "%04X  %02X  A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%d\n" cpu.pc opcode cpu.a cpu.x cpu.y (flags_to_int cpu) cpu.s !cycles;
     cpu.pc <- cpu.pc + 1;
+    (* let arg = (Location.load cpu instruction.location) in *)
+    let arg = Option.value_exn (Location.target instruction.location) in
+    (* printf "%04x\n" (Location.load cpu @@ Location.MemoryW 0xC001); *)
+    printf "%04x\n" arg;
     execute_instruction cpu instruction;
     cycles := !cycles + 1;
   done;
