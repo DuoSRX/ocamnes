@@ -21,6 +21,7 @@ B /Users/xperez/.opam/4.07.0/lib/parsexp
 B /Users/xperez/.opam/4.07.0/lib/ppx_assert/runtime-lib
 B /Users/xperez/.opam/4.07.0/lib/ppx_bench/runtime-lib
 B /Users/xperez/.opam/4.07.0/lib/ppx_compare/runtime-lib
+B /Users/xperez/.opam/4.07.0/lib/ppx_deriving/runtime
 B /Users/xperez/.opam/4.07.0/lib/ppx_enumerate/runtime-lib
 B /Users/xperez/.opam/4.07.0/lib/ppx_expect/collector
 B /Users/xperez/.opam/4.07.0/lib/ppx_expect/common
@@ -64,6 +65,7 @@ S /Users/xperez/.opam/4.07.0/lib/parsexp
 S /Users/xperez/.opam/4.07.0/lib/ppx_assert/runtime-lib
 S /Users/xperez/.opam/4.07.0/lib/ppx_bench/runtime-lib
 S /Users/xperez/.opam/4.07.0/lib/ppx_compare/runtime-lib
+S /Users/xperez/.opam/4.07.0/lib/ppx_deriving/runtime
 S /Users/xperez/.opam/4.07.0/lib/ppx_enumerate/runtime-lib
 S /Users/xperez/.opam/4.07.0/lib/ppx_expect/collector
 S /Users/xperez/.opam/4.07.0/lib/ppx_expect/common
@@ -85,4 +87,5 @@ S /Users/xperez/.opam/4.07.0/lib/tsdl
 S /Users/xperez/.opam/4.07.0/lib/typerep
 S /Users/xperez/.opam/4.07.0/lib/variantslib
 S .
+FLG -ppx '/Users/xperez/code/ocaml/blah/_build/default/.ppx/30a18adec0a1407675322d723bf1b0ae/ppx.exe --as-ppx'
 FLG -w @a-4-29-40-41-42-44-45-48-58-59-60-40 -strict-sequence -strict-formats -short-paths -keep-locs

@@ -1,6 +1,5 @@
 open Core
 open Cpu
-open Instructions
 
 type header = {
   prg_size: int;
@@ -60,8 +59,10 @@ let main () =
   while !cycles < 30 do
     let opcode = load_byte cpu cpu.pc in
     let instruction = decode_instruction cpu opcode in
-    let str_op = op_to_string instruction.op in
-    printf "%04X %02X %s %s A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%d\n" cpu.pc opcode str_op (args_to_string instruction) cpu.a cpu.x cpu.y (flags_to_int cpu) cpu.s !cycles;
+    let str_op = Instructions.show_instruction instruction.op in
+    let instr = sprintf "%s %s" str_op (args_to_string instruction) in
+    let cy = !cycles * 3 mod 341 in
+    printf "%04X  %02X  %-13s A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%3d\n" cpu.pc opcode instr cpu.a cpu.x cpu.y (flags_to_int cpu) cpu.s cy;
     execute_instruction cpu instruction;
     if should_change_pc instruction.op then cpu.pc <- cpu.pc + instruction.size;
     cycles := !cycles + instruction.cycles;
