@@ -118,11 +118,13 @@ module AddressingMode = struct
     | Absolute | AbsoluteX | AbsoluteY -> 3
 end
 
-let decode_addressing_mode cpu am = match am with
-  | AddressingMode.Immediate -> Location.Immediate (load_next_byte cpu)
-  | AddressingMode.Absolute -> Location.MemoryW (load_next_word cpu)
-  (* | AddressingMode.AbsoluteX -> Location.Memory (wrapping_add (load_next_word cpu) cpu.x)
-  | AddressingMode.AbsoluteY -> Location.Memory (wrapping_add (load_next_word cpu) cpu.x) *)
+let decode_addressing_mode cpu am =
+  let pc = cpu.pc + 1 in
+  match am with
+  | AddressingMode.Immediate -> Location.Immediate (load_byte cpu pc)
+  | AddressingMode.Absolute -> Location.MemoryW (load_word cpu pc)
+  | AddressingMode.ZeroPage -> Location.Memory (load_byte cpu pc)
+  | AddressingMode.Implicit -> Location.Immediate 0xDEAD
   | _ -> failwith "unknown addressing mode"
 
 let set_nz_flags cpu value =
@@ -149,25 +151,23 @@ let sta c loc = Location.store c c.a loc
 let stx c loc = Location.store c c.x loc
 let sty c loc = Location.store c c.y loc
 
-let jmp c loc = match (Location.target loc) with
-  | None -> ()
-  | Some(target) -> c.pc <- target
+let jmp c loc = c.pc <- Option.value_exn (Location.target loc)
 
-let jsr cpu =
-  let address = load_word_and_bump_pc cpu in
+let jsr cpu loc =
+  let address = Option.value_exn (Location.target loc) in
   let pc = cpu.pc - 1 in
   push_word cpu pc;
   cpu.pc <- address
 
-let branch cpu cond =
+let branch cpu loc cond =
   (* TODO: Figure out some i32 -> u16 magic here *)
-  let byte = load_byte_and_bump_pc cpu in
-  if cond then cpu.pc <- cpu.pc + byte
+  let address = Location.load cpu loc in
+  if cond then cpu.pc <- cpu.pc + address
 
-let bcs cpu = branch cpu cpu.carry
-let bcc cpu = branch cpu (not cpu.carry)
+let bcs cpu loc = branch cpu loc cpu.carry
+let bcc cpu loc = branch cpu loc (not cpu.carry)
 
-type op = JMP | LDX
+type op = JMP | LDX | JSR | RTS | STX | NOP | SEC | BCS
 
 type instruction = {
   op : op;
@@ -177,10 +177,19 @@ type instruction = {
   size: int;
 }
 
+let should_change_pc = function
+  | JMP | JSR | RTS -> false
+  | _ -> true
+
 let decode opcode =
   match opcode with
   | 0x4C -> (JMP, AddressingMode.Absolute, 3)
   | 0xA2 -> (LDX, Immediate, 2)
+  | 0x86 -> (STX, ZeroPage, 1)
+  | 0x20 -> (JSR, Absolute, 5)
+  | 0xEA -> (NOP, Implicit, 2)
+  | 0x38 -> (SEC, Implicit, 2)
+  | 0xB0 -> (BCS, Absolute, 2)
   | _ -> failwith @@ sprintf "Unknown opcode %#02x" opcode
 
 (* (instruction, bytes read *)
@@ -190,40 +199,16 @@ let decode_instruction cpu instruction =
   { op; mode; cycles; location; size = AddressingMode.size mode}
 
 let execute_instruction cpu instruction =
-  (* cpu.pc <- cpu.pc + instruction.size; *)
   let loc = instruction.location in
   match instruction.op with
   | JMP -> jmp cpu loc
-  | _ -> ();
-
-(* let execute_instruction cpu instruction =
-  match instruction with
-  | 0xEA -> () (* NOP *)
-  | 0x38 -> cpu.carry <- true
-  | 0x18 -> cpu.carry <- false
-  | 0xAA -> tax cpu
-  | 0x8A -> txa cpu
-  | 0xE8 -> inx cpu
-  | 0xCA -> dex cpu
-  | 0xCE -> dec cpu (absolute cpu)
-  | 0xEE -> inc cpu (absolute cpu)
-  | 0xA2 -> ldx cpu (immediate cpu)
-  | 0xA9 -> lda cpu (immediate cpu)
-  | 0xA5 -> lda cpu (zero_page cpu)
-  | 0xB5 -> lda cpu (zero_page_x cpu)
-  | 0xAD -> lda cpu (absolute cpu)
-  | 0xBD -> lda cpu (absolute_x cpu)
-  | 0xB9 -> lda cpu (absolute_y cpu)
-  | 0xA1 -> lda cpu (indirect_x cpu)
-  | 0xB1 -> lda cpu (indirect_y cpu)
-  | 0x8D -> sta cpu (absolute cpu)
-  | 0x86 -> stx cpu (zero_page cpu)
-  | 0x84 -> sty cpu (zero_page cpu)
-  | 0x4C -> jmp cpu
-  | 0x20 -> jsr cpu
-  | 0xB0 -> bcs cpu
-  | 0x90 -> bcc cpu
-  | _ -> failwith @@ sprintf "unknown instruction %#04x" instruction *)
+  | LDX -> ldx cpu loc
+  | STX -> stx cpu loc
+  | JSR -> jsr cpu loc
+  | SEC -> cpu.carry <- true
+  | BCS -> bcs cpu loc
+  | NOP -> ()
+  | _ -> failwith "Unimplemented instruction"
 
 type header = {
   prg_size: int;
@@ -284,12 +269,14 @@ let main () =
     let opcode = load_next_byte cpu in
     let instruction = decode_instruction cpu opcode in
     printf "%04X  %02X  A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%d\n" cpu.pc opcode cpu.a cpu.x cpu.y (flags_to_int cpu) cpu.s !cycles;
-    cpu.pc <- cpu.pc + 1;
+    (* cpu.pc <- cpu.pc + 1; *)
     (* let arg = (Location.load cpu instruction.location) in *)
-    let arg = Option.value_exn (Location.target instruction.location) in
+    (* let arg = Option.value_exn (Location.target instruction.location) in *)
     (* printf "%04x\n" (Location.load cpu @@ Location.MemoryW 0xC001); *)
-    printf "%04x\n" arg;
+    (* printf "%04x\n" arg; *)
     execute_instruction cpu instruction;
+    if should_change_pc instruction.op then cpu.pc <- cpu.pc + instruction.size;
+    (* printf "%04X  %02X  A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%d\n" cpu.pc opcode cpu.a cpu.x cpu.y (flags_to_int cpu) cpu.s !cycles; *)
     cycles := !cycles + 1;
   done;
 
