@@ -49,14 +49,14 @@ let main () =
   let rom = load_rom () in
   load_rom_into_memory memory rom;
   let cpu = {
-    a = 0; x = 0; y = 0; memory; s = 0xFD; pc = 0;
+    a = 0; x = 0; y = 0; memory; s = 0xFD; pc = 0; extra_cycles = 0;
     zero = false; sign = false; carry = false; decimal = false; interrupt = true; overflow = false } in
   (* let start = memory.(0xFFFC) lor (memory.(0xFFFD) lsl 8) in *)
   let start = 0xC000 in
   cpu.pc <- start;
 
   let cycles = ref 0 in
-  while !cycles < 30 do
+  while !cycles < 120 do
     let opcode = load_byte cpu cpu.pc in
     let instruction = decode_instruction cpu opcode in
     let str_op = Instructions.show_instruction instruction.op in
@@ -65,7 +65,8 @@ let main () =
     printf "%04X  %02X  %-13s A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%3d\n" cpu.pc opcode instr cpu.a cpu.x cpu.y (flags_to_int cpu) cpu.s cy;
     execute_instruction cpu instruction;
     if should_change_pc instruction.op then cpu.pc <- cpu.pc + instruction.size;
-    cycles := !cycles + instruction.cycles;
+    cycles := !cycles + instruction.cycles + cpu.extra_cycles;
+    cpu.extra_cycles <- 0
   done;
 
   ()
