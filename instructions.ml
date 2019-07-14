@@ -1,10 +1,11 @@
 type instruction =
-    JMP
-  | LDX
+    BCS
+  | CLC
+  | JMP
   | JSR
-  | RTS
-  | STX
+  | LDX
   | NOP
+  | RTS
   | SEC
-  | BCS
+  | STX
   [@@deriving show { with_path = false }]

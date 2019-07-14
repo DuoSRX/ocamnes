@@ -28,6 +28,8 @@ type cpu = {
   mutable zero : bool;
   mutable carry : bool;
 
+  mutable extra_cycles: int;
+
   memory : int array;
 }
 
@@ -130,11 +132,17 @@ let jsr cpu address =
   cpu.pc <- address
 
 let branch cpu offset cond =
-  (* TODO: Figure out some i32 -> u16 magic here *)
-  if cond then cpu.pc <- cpu.pc + offset
+  if cond then
+    (* Treat offset as a 8 bit signed integer and wrap around if necessary *)
+    (* let off = if offset > 127 then -(((lnot offset) + 1) land 0xFF) else offset in *)
+    let c = (cpu.pc + offset) land 0xFFFF in
+    (* Add an extra cycle when cond is true and one more when crossing a page boundary *)
+    let cycles = if (c / 256) <> (cpu.pc / 256) then 2 else 1 in
+    cpu.extra_cycles <- cpu.extra_cycles + cycles;
+    cpu.pc <- c
 
-let bcs cpu address = branch cpu address cpu.carry
-let bcc cpu address = branch cpu address @@ not cpu.carry
+let bcs cpu offset = branch cpu offset cpu.carry
+let bcc cpu offset = branch cpu offset (not cpu.carry)
 
 type instruction = {
   op : Instructions.instruction;
@@ -161,11 +169,12 @@ let decode opcode =
   match opcode with
   | 0x4C -> (JMP, AddressingMode.Absolute, 3)
   | 0xA2 -> (LDX, Immediate, 2)
-  | 0x86 -> (STX, ZeroPage, 1)
-  | 0x20 -> (JSR, Absolute, 5)
+  | 0x86 -> (STX, ZeroPage, 3)
+  | 0x20 -> (JSR, Absolute, 6)
   | 0xEA -> (NOP, Implicit, 2)
   | 0x38 -> (SEC, Implicit, 2)
   | 0xB0 -> (BCS, Relative, 2)
+  | 0x18 -> (CLC, Implicit, 2)
   | _ -> failwith @@ sprintf "Unknown opcode %#02x" opcode
 
 let decode_instruction cpu instruction =
@@ -176,15 +185,12 @@ let decode_instruction cpu instruction =
 let execute_instruction cpu instruction =
   let args = instruction.args in
   match instruction.op with
+  | BCS -> bcs cpu instruction.args
   | JMP -> jmp cpu (Option.value_exn instruction.target)
-  | LDX -> ldx cpu args
-  | STX -> stx cpu args
   | JSR -> jsr cpu (Option.value_exn instruction.target)
+  | LDX -> ldx cpu args
   | NOP -> ()
   | SEC -> cpu.carry <- true
-  | BCS -> bcs cpu instruction.args
-  (* | BCS -> bcs cpu (Option.value_exn instruction.target) *)
-  (* | STX -> stx cpu loc
-  | SEC -> cpu.carry <- true
-  | NOP -> () *)
+  | STX -> stx cpu args
+  | CLC -> cpu.carry <- false
   | _ -> failwith @@ sprintf "Unimplemented instruction %s" (Instructions.show_instruction instruction.op)
