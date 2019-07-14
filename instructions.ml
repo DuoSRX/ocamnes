@@ -1,8 +1,11 @@
 type instruction =
-    BCS
+    BCC
+  | BCS
+  | BEQ
   | CLC
   | JMP
   | JSR
+  | LDA
   | LDX
   | NOP
   | RTS

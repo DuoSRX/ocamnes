@@ -112,19 +112,17 @@ let dex c = c.x <- set_nz_flags c (wrapping_add c.x (-1))
 (* let inc cpu loc =
   let value = wrapping_add (Location.load cpu loc) 1 in
   Location.store cpu ((set_nz_flags cpu value) land 0xFF) loc
-
 let dec cpu loc =
   let value = wrapping_add (Location.load cpu loc) (-1) in
   Location.store cpu ((set_nz_flags cpu value) land 0xFF) loc
 
-let lda c loc = c.a <- set_nz_flags c (Location.load c loc)
-let ldx c loc = c.x <- set_nz_flags c (Location.load c loc)
 let sta c loc = Location.store c c.a loc
 let stx c loc = Location.store c c.x loc
 let sty c loc = Location.store c c.y loc *)
 
 let jmp c dst = c.pc <- dst
 let stx c args = c.x <- args
+let lda c args = c.x <- set_nz_flags c args
 let ldx c args = c.x <- set_nz_flags c args
 
 let jsr cpu address =
@@ -143,6 +141,8 @@ let branch cpu offset cond =
 
 let bcs cpu offset = branch cpu offset cpu.carry
 let bcc cpu offset = branch cpu offset (not cpu.carry)
+let beq cpu offset = branch cpu offset cpu.zero
+let bnq cpu offset = branch cpu offset (not cpu.zero)
 
 type instruction = {
   op : Instructions.instruction;
@@ -168,6 +168,7 @@ let should_change_pc = function
 let decode opcode =
   match opcode with
   | 0x4C -> (JMP, AddressingMode.Absolute, 3)
+  | 0xA9 -> (LDA, Immediate, 2)
   | 0xA2 -> (LDX, Immediate, 2)
   | 0x86 -> (STX, ZeroPage, 3)
   | 0x20 -> (JSR, Absolute, 6)
@@ -175,6 +176,8 @@ let decode opcode =
   | 0x38 -> (SEC, Implicit, 2)
   | 0xB0 -> (BCS, Relative, 2)
   | 0x18 -> (CLC, Implicit, 2)
+  | 0x90 -> (BCC, Relative, 2)
+  | 0xF0 -> (BEQ, Relative, 2)
   | _ -> failwith @@ sprintf "Unknown opcode %#02x" opcode
 
 let decode_instruction cpu instruction =
@@ -186,11 +189,14 @@ let execute_instruction cpu instruction =
   let args = instruction.args in
   match instruction.op with
   | BCS -> bcs cpu instruction.args
+  | BCC -> bcc cpu instruction.args
+  | BEQ -> beq cpu instruction.args
   | JMP -> jmp cpu (Option.value_exn instruction.target)
   | JSR -> jsr cpu (Option.value_exn instruction.target)
+  | LDA -> lda cpu args
   | LDX -> ldx cpu args
   | NOP -> ()
   | SEC -> cpu.carry <- true
   | STX -> stx cpu args
   | CLC -> cpu.carry <- false
-  | _ -> failwith @@ sprintf "Unimplemented instruction %s" (Instructions.show_instruction instruction.op)
+  | _ -> failwith @@ sprintf "Unimplemented instruction %s" (show_instruction instruction.op)
