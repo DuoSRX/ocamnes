@@ -1,7 +1,6 @@
 open Core
+open OUnit2
 open Nes.Cpu
-
-(* Yeah this doesn't work... *)
 
 let make_cpu () =
   let memory = Array.create ~len:0x10000 0 in
@@ -10,15 +9,22 @@ let make_cpu () =
     zero = false; negative = false; carry = false; decimal = false; interrupt = true; overflow = false
   }
 
-let jmp () =
+let push_byte_test _ =
   let cpu = make_cpu () in
-  Alcotest.(check int) "same pc" 0x0 cpu.pc
+  push_byte cpu 0x42;
+  assert_equal 0x42 (pop_byte cpu) ~printer:string_of_int
 
-let test_set = [
-  "JMP", `Quick, jmp;
+let push_word_test _ =
+  let cpu = make_cpu () in
+  push_word cpu 0x1234;
+  assert_equal 0x1234 (pop_word cpu) ~printer:string_of_int;
+  push_byte cpu 0x12;
+  push_byte cpu 0x34;
+  assert_equal 0x1234 (pop_word cpu) ~printer:string_of_int
+
+let tests = "test suite for CPU" >::: [
+  "stack bytes" >:: push_byte_test;
+  "stack words" >:: push_word_test;
 ]
 
-let () =
-  Alcotest.run "CPU tests" [
-    "test_set", test_set;
-  ]
+let () = run_test_tt_main tests
