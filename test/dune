@@ -1,0 +1,3 @@
+(test
+ (name cpu_test)
+ (libraries nes ounit alcotest))

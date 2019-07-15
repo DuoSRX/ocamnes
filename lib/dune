@@ -1,0 +1,5 @@
+(library
+ (name      nes)
+ (libraries core)
+ (preprocess
+  (pps ppx_deriving.std)))
