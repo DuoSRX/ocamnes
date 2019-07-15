@@ -170,8 +170,8 @@ let bvc cpu offset = branch cpu offset (not cpu.overflow)
 
 let bit cpu byte =
   let result = cpu.a land byte in
-  cpu.negative <- Flags.negative land result <> 0;
-  cpu.overflow <- Flags.overflow land result <> 0;
+  cpu.negative <- Flags.negative land byte > 0;
+  cpu.overflow <- Flags.overflow land byte > 0;
   cpu.zero <- result = 0
 
 let php cpu =
@@ -190,6 +190,7 @@ let plp cpu =
 let pla cpu = cpu.a <- set_nz_flags cpu (pop_byte cpu)
 
 let andd cpu args = cpu.a <- set_nz_flags cpu (cpu.a land args)
+let ora cpu args = cpu.a <- set_nz_flags cpu (cpu.a lor args)
 
 let cmp cpu args =
   let result = wrapping_sub cpu.a args in
@@ -237,6 +238,7 @@ let decode opcode =
   match opcode with
   | 0x00 -> (BRK, Implicit, 7)
   | 0x08 -> (PHP, Implicit, 3)
+  | 0x09 -> (ORA, Immediate, 2)
   | 0x10 -> (BPL, Relative, 2)
   | 0x18 -> (CLC, Implicit, 2)
   | 0x20 -> (JSR, Absolute, 6)
@@ -255,9 +257,10 @@ let decode opcode =
   | 0x85 -> (STA, ZeroPage, 3)
   | 0x86 -> (STX, ZeroPage, 3)
   | 0x90 -> (BCC, Relative, 2)
-  | 0xA9 -> (LDA, Immediate, 2)
   | 0xA2 -> (LDX, Immediate, 2)
+  | 0xA9 -> (LDA, Immediate, 2)
   | 0xB0 -> (BCS, Relative, 2)
+  | 0xB8 -> (CLV, Implicit, 2)
   | 0xC9 -> (CMP, Immediate, 2)
   | 0xD0 -> (BNE, Relative, 2)
   | 0xD8 -> (CLD, Implicit, 2)
@@ -287,12 +290,14 @@ let execute_instruction cpu instruction =
   | BVC -> bvc cpu args
   | CLC -> cpu.carry <- false
   | CLD -> cpu.decimal <- false
+  | CLV -> cpu.overflow <- false
   | CMP -> cmp cpu args
   | JMP -> jmp cpu (Option.value_exn instruction.target)
   | JSR -> jsr cpu (Option.value_exn instruction.target)
   | LDA -> lda cpu args
   | LDX -> ldx cpu args
   | NOP -> ()
+  | ORA -> ora cpu args
   | PHA -> push_byte cpu cpu.a
   | PHP -> php cpu
   | PLA -> pla cpu

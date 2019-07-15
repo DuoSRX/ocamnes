@@ -14,12 +14,14 @@ type instruction =
   | BVS
   | CLC
   | CLD
+  | CLV
   | CMP
   | JMP
   | JSR
   | LDA
   | LDX
   | NOP
+  | ORA
   | PHA
   | PHP
   | PLA
