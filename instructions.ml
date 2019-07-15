@@ -1,7 +1,17 @@
 type instruction =
-    BCC
+    ADC
+  | AND
+  | ASL
+  | BCC
   | BCS
   | BEQ
+  | BIT
+  | BMI
+  | BNE
+  | BPL
+  | BRK
+  | BVC
+  | BVS
   | CLC
   | JMP
   | JSR
@@ -10,5 +20,7 @@ type instruction =
   | NOP
   | RTS
   | SEC
+  | STA
   | STX
+  | STY
   [@@deriving show { with_path = false }]
