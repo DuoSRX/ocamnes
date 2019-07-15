@@ -14,6 +14,7 @@ module Flags = struct
 end
 
 let wrapping_add a b = (a + b) land 0xFF
+let wrapping_sub a b = wrapping_add a (-b)
 let wrapping_add_w a b = (a + b) land 0xFFFF
 
 type cpu = {
@@ -58,24 +59,21 @@ let store_word cpu address value =
   store_byte cpu (address + 1) hi
 
 let push_byte cpu value =
-  let sp = cpu.s in
-  store_word cpu (0x100 + sp) value;
-  cpu.s <- wrapping_add cpu.s (-1)
+  store_byte cpu (0x100 + cpu.s) value;
+  cpu.s <- wrapping_sub cpu.s 1
 
 let push_word cpu value =
-  let sp = wrapping_add cpu.s (-1) in
-  store_word cpu (0x100 + sp) value;
-  cpu.s <- wrapping_add cpu.s (-2)
+  push_byte cpu ((value land 0xFF00) lsr 8);
+  push_byte cpu (value land 0xFF)
 
 let pop_byte cpu =
-  let byte = load_byte cpu (0x100 + cpu.s + 1) in
   cpu.s <- wrapping_add cpu.s 1;
-  byte
+  load_byte cpu (0x100 + cpu.s)
 
 let pop_word cpu =
-  let word = load_word cpu (0x100 + cpu.s + 1) in
-  cpu.s <- wrapping_add cpu.s 2;
-  word
+  let lo = pop_byte cpu in
+  let hi = pop_byte cpu in
+  (hi lsl 8) lor lo
 
 let flags_to_int cpu =
   let p = ref Flags.break5 in
@@ -145,8 +143,11 @@ let brk cpu =
   cpu.pc <- load_word cpu 0xFFEE
 
 let jsr cpu address =
+  (* printf "PUSHING FOR JSR @ %04X\n" (wrapping_add_w cpu.pc 3); *)
   push_word cpu (wrapping_add_w cpu.pc 3);
   cpu.pc <- address
+
+let rts cpu = cpu.pc <- pop_word cpu
 
 let branch cpu offset cond =
   if cond then
@@ -162,6 +163,7 @@ let bcs cpu offset = branch cpu offset cpu.carry
 let bcc cpu offset = branch cpu offset (not cpu.carry)
 let beq cpu offset = branch cpu offset cpu.zero
 let bne cpu offset = branch cpu offset (not cpu.zero)
+let bmi cpu offset = branch cpu offset cpu.negative
 let bpl cpu offset = branch cpu offset (not cpu.negative)
 let bvs cpu offset = branch cpu offset cpu.overflow
 let bvc cpu offset = branch cpu offset (not cpu.overflow)
@@ -176,9 +178,24 @@ let php cpu =
   let flags = (flags_to_int cpu) lor (Flags.b) in
   push_byte cpu flags
 
+let plp cpu =
+  let flags = pop_byte cpu in
+  cpu.carry <- flags land Flags.carry > 0;
+  cpu.zero <- flags land Flags.zero > 0;
+  cpu.interrupt <- flags land Flags.interrupt > 0;
+  cpu.decimal <- flags land Flags.decimal > 0;
+  cpu.overflow <- flags land Flags.overflow > 0;
+  cpu.negative <- flags land Flags.negative > 0
+
 let pla cpu = cpu.a <- set_nz_flags cpu (pop_byte cpu)
 
 let andd cpu args = cpu.a <- set_nz_flags cpu (cpu.a land args)
+
+let cmp cpu args =
+  let result = wrapping_sub cpu.a args in
+  cpu.carry <- cpu.a >= args;
+  cpu.zero <- cpu.a = args;
+  cpu.negative <- result > 127
 
 type instr = {
   op : Instructions.instruction;
@@ -224,8 +241,11 @@ let decode opcode =
   | 0x18 -> (CLC, Implicit, 2)
   | 0x20 -> (JSR, Absolute, 6)
   | 0x24 -> (BIT, ZeroPage, 3)
+  | 0x28 -> (PLP, Implicit, 4)
   | 0x29 -> (AND, Immediate, 2)
+  | 0x30 -> (BMI, Relative, 2)
   | 0x38 -> (SEC, Implicit, 2)
+  | 0x48 -> (PHA, Implicit, 3)
   | 0x4C -> (JMP, Absolute, 3)
   | 0x50 -> (BVC, Relative, 2)
   | 0x60 -> (RTS, Implicit, 6)
@@ -238,7 +258,9 @@ let decode opcode =
   | 0xA9 -> (LDA, Immediate, 2)
   | 0xA2 -> (LDX, Immediate, 2)
   | 0xB0 -> (BCS, Relative, 2)
+  | 0xC9 -> (CMP, Immediate, 2)
   | 0xD0 -> (BNE, Relative, 2)
+  | 0xD8 -> (CLD, Implicit, 2)
   | 0xEA -> (NOP, Implicit, 2)
   | 0xF0 -> (BEQ, Relative, 2)
   | 0xF8 -> (SED, Implicit, 2)
@@ -257,20 +279,25 @@ let execute_instruction cpu instruction =
   | BCC -> bcc cpu args
   | BEQ -> beq cpu args
   | BIT -> bit cpu args
+  | BMI -> bmi cpu args
   | BNE -> bne cpu args
   | BPL -> bpl cpu args
   | BRK -> brk cpu
   | BVS -> bvs cpu args
   | BVC -> bvc cpu args
   | CLC -> cpu.carry <- false
+  | CLD -> cpu.decimal <- false
+  | CMP -> cmp cpu args
   | JMP -> jmp cpu (Option.value_exn instruction.target)
   | JSR -> jsr cpu (Option.value_exn instruction.target)
   | LDA -> lda cpu args
   | LDX -> ldx cpu args
   | NOP -> ()
+  | PHA -> push_byte cpu cpu.a
   | PHP -> php cpu
   | PLA -> pla cpu
-  | RTS -> cpu.pc <- pop_word cpu
+  | PLP -> plp cpu
+  | RTS -> rts cpu
   | SEC -> cpu.carry <- true
   | SED -> cpu.decimal <- true
   | SEI -> cpu.interrupt <- true
