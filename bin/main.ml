@@ -1,5 +1,6 @@
 open Core
-open Cpu
+open Nes
+open Nes.Cpu
 
 type header = {
   prg_size: int;

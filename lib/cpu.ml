@@ -95,6 +95,8 @@ module AddressingMode = struct
     [@@deriving show]
 end
 
+open AddressingMode
+
 let decode_addressing_mode cpu am =
   let pc = cpu.pc + 1 in
   match am with
@@ -213,8 +215,6 @@ let args_to_hex_string i =
 let should_change_pc = function
   | JMP | JSR | RTS -> false
   | _ -> true
-
-open AddressingMode
 
 let decode opcode =
   match opcode with

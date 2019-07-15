@@ -1,5 +1,5 @@
 (executable
  (name      main)
- (libraries core tsdl)
+ (libraries core nes)
  (preprocess
   (pps ppx_deriving.std)))
