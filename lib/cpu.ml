@@ -117,8 +117,12 @@ let set_nz_flags cpu value =
   cpu.negative <- value land 0x80 <> 0;
   value
 
-let tax c = c.a <- set_nz_flags c c.x
-let txa c = c.x <- set_nz_flags c c.a
+let tax c = c.x <- set_nz_flags c c.a
+let txa c = c.a <- set_nz_flags c c.x
+let tay c = c.y <- set_nz_flags c c.a
+let tya c = c.a <- set_nz_flags c c.y
+let txs c = c.s <- c.x (* Not a bug. TXS is the only transfer that doesn't change NZ *)
+let tsx c = c.x <- set_nz_flags c c.s
 
 let dex c = c.x <- set_nz_flags c @@ wrapping_sub c.x 1
 let dey c = c.y <- set_nz_flags c @@ wrapping_sub c.y 1
@@ -133,11 +137,12 @@ let lda c args = c.a <- set_nz_flags c args
 let ldx c args = c.x <- set_nz_flags c args
 let ldy c args = c.y <- set_nz_flags c args
 
-let brk cpu =
+let brk _ = failwith "oh no"
+(* let brk cpu =
   push_word cpu (cpu.pc + 2);
   push_byte cpu @@ (flags_to_int cpu) lor Flags.b;
   cpu.interrupt <- true;
-  cpu.pc <- load_word cpu 0xFFEE
+  cpu.pc <- load_word cpu 0xFFEE *)
 
 let jsr cpu address =
   (* printf "PUSHING FOR JSR @ %04X\n" (wrapping_add_w cpu.pc 3); *)
@@ -218,10 +223,22 @@ type instr = {
   size: int;
 } [@@deriving show]
 
+let op_is_write = function
+  | STA | STX | STY | LDA | LDX | LDY -> true
+  | _ -> false
+
+let should_change_pc = function
+  | JMP | JSR | RTS -> false
+  | _ -> true
+
 let args_to_string i =
   match i.mode with
   | Immediate -> sprintf "#$%02X" i.args
-  | Absolute -> sprintf "$%04X" (Option.value_exn i.target)
+  | Absolute ->
+    if op_is_write i.op then
+      sprintf "$%04X = %02X" (Option.value_exn i.target) i.args
+    else
+      sprintf "$%04X" (Option.value_exn i.target)
   | ZeroPage -> sprintf "$%02X = %02X" (Option.value_exn i.target) i.args
   | Relative -> sprintf "$%04X" ((Option.value_exn i.target) + i.args + 1)
   | Implicit -> ""
@@ -240,10 +257,6 @@ let args_to_hex_string i =
   | Relative -> sprintf "%02X" i.args
   | Implicit -> ""
   | _ -> failwith @@ sprintf "can't print %s" @@ show_instr i
-
-let should_change_pc = function
-  | JMP | JSR | RTS -> false
-  | _ -> true
 
 let decode opcode =
   match opcode with
@@ -270,12 +283,21 @@ let decode opcode =
   | 0x85 -> (STA, ZeroPage, 3)
   | 0x86 -> (STX, ZeroPage, 3)
   | 0x88 -> (DEY, Implicit, 2)
+  | 0x8A -> (TXA, Implicit, 2)
+  | 0x8E -> (STX, Absolute, 4)
   | 0x90 -> (BCC, Relative, 2)
+  | 0x9A -> (TXS, Implicit, 2)
+  | 0x98 -> (TYA, Implicit, 2)
   | 0xA0 -> (LDY, Immediate, 2)
   | 0xA2 -> (LDX, Immediate, 2)
   | 0xA9 -> (LDA, Immediate, 2)
+  | 0xA8 -> (TAY, Implicit, 2)
+  | 0xAA -> (TAX, Implicit, 2)
+  | 0xAD -> (LDA, Absolute, 4)
+  | 0xAE -> (LDX, Absolute, 4)
   | 0xB0 -> (BCS, Relative, 2)
   | 0xB8 -> (CLV, Implicit, 2)
+  | 0xBA -> (TSX, Implicit, 2)
   | 0xC0 -> (CPY, Immediate, 2)
   | 0xC8 -> (INY, Implicit, 2)
   | 0xC9 -> (CMP, Immediate, 2)
@@ -340,4 +362,10 @@ let execute_instruction cpu instruction =
   | STA -> sta cpu (Option.value_exn instruction.target)
   | STX -> stx cpu (Option.value_exn instruction.target)
   | STY -> sty cpu (Option.value_exn instruction.target)
+  | TAX -> tax cpu
+  | TAY -> tay cpu
+  | TSX -> tsx cpu
+  | TXA -> txa cpu
+  | TXS -> txs cpu
+  | TYA -> tya cpu
   | _ -> failwith @@ sprintf "Unimplemented instruction %s" (show_instruction instruction.op)
