@@ -30,8 +30,8 @@ let load_rom () =
   let filename = "./nestest.nes" in
   let rom = open_file filename in
   let headers = load_headers rom in
-  printf "Loaded rom %s\n" filename;
-  printf "PRG:%04x CHR:%04x\n" headers.prg_size headers.chr_size;
+  (* printf "Loaded rom %s\n" filename;
+  printf "PRG:%04x CHR:%04x\n" headers.prg_size headers.chr_size; *)
   {
     headers;
     prg = Array.slice rom 0x10 (0x10 + headers.prg_size);
@@ -44,7 +44,11 @@ let load_rom_into_memory mem rom =
   (* TODO: Load CHR into PPU *)
   (* Array.blit ~len:rom.headers.chr_size ~src:rom.chr ~src_pos:0 ~dst:cpu.memory ~dst_pos:0 *)
 
+let load_nestest_log () =
+  In_channel.read_lines "./nestest.log" |> Array.of_list
+
 let main () =
+  let nestest = In_channel.read_lines "./nestest.log" |> Array.of_list in
   let memory = Array.create ~len:0x10000 0 in
   let rom = load_rom () in
   load_rom_into_memory memory rom;
@@ -56,7 +60,8 @@ let main () =
   cpu.pc <- start;
 
   let cycles = ref 0 in
-  while !cycles < 120 do
+  let steps = ref 0 in
+  while !steps < 1000 do
     let opcode = load_byte cpu cpu.pc in
     let instruction = decode_instruction cpu opcode in
     let str_op = Instructions.show_instruction instruction.op in
@@ -64,11 +69,20 @@ let main () =
     let str_args = args_to_hex_string instruction in
     let cy = !cycles * 3 mod 341 in
     let status = sprintf "A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%3d" cpu.a cpu.x cpu.y (flags_to_int cpu) cpu.s cy in
-    printf "%04X  %02X %-6s %-23s %s\n" cpu.pc opcode str_args instr status;
+    let log = sprintf "%04X  %02X %-6s %-31s %s" cpu.pc opcode str_args instr status in
+
+    let nestest_log = nestest.(!steps) in
+    if not (String.equal log nestest_log) then (
+      print_endline "Nestest discrepancy detected";
+      print_endline nestest_log;
+      print_endline log;
+    );
+
     execute_instruction cpu instruction;
     if should_change_pc instruction.op then cpu.pc <- cpu.pc + instruction.size;
     cycles := !cycles + instruction.cycles + cpu.extra_cycles;
-    cpu.extra_cycles <- 0
+    steps := !steps + 1;
+    cpu.extra_cycles <- 0;
   done;
 
   ()
