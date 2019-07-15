@@ -80,6 +80,7 @@ module AddressingMode = struct
     | Implicit | Absolute | AbsoluteX | AbsoluteY
     | ZeroPage | ZeroPageX | ZeroPageY
     | Relative | IndirectX | IndirectY | Immediate
+    [@@deriving show]
 end
 
 let decode_addressing_mode cpu am =
@@ -150,22 +151,37 @@ let bit cpu byte =
   cpu.overflow <- Flags.overflow land result <> 0;
   cpu.zero <- result = 0;
 
-type instruction = {
+type instr = {
   op : Instructions.instruction;
   mode : AddressingMode.t;
   args : int;
   target : int option;
   cycles : int;
   size: int;
-}
+} [@@deriving show]
 
 let args_to_string i =
   match i.mode with
-  | Absolute -> sprintf "$%04X" (Option.value_exn i.target)
   | Immediate -> sprintf "#$%02X" i.args
-  | ZeroPage -> sprintf "$%02X = %02x" (Option.value_exn i.target) i.args
+  | Absolute -> sprintf "$%04X" (Option.value_exn i.target)
+  | ZeroPage -> sprintf "$%02X = %02X" (Option.value_exn i.target) i.args
   | Relative -> sprintf "$%04X" ((Option.value_exn i.target) + i.args + 1)
-  | _ -> ""
+  | Implicit -> ""
+  | _ -> failwith @@ sprintf "can't print %s" @@ show_instr i
+
+let word_to_byte_string w =
+  let lo = w land 0xFF in
+  let hi = (w lsr 8) land 0xFF in
+  sprintf "%02X %02X" lo hi
+
+let args_to_hex_string i =
+  match i.mode with
+  | Immediate -> sprintf "%02X" i.args
+  | Absolute -> word_to_byte_string (Option.value_exn i.target)
+  | ZeroPage -> sprintf "%02X" (Option.value_exn i.target)
+  | Relative -> sprintf "%02X" i.args
+  | Implicit -> ""
+  | _ -> failwith @@ sprintf "can't print %s" @@ show_instr i
 
 let should_change_pc = function
   | JMP | JSR | RTS -> false
