@@ -42,4 +42,10 @@ type instruction =
   | STA
   | STX
   | STY
+  | TAX
+  | TAY
+  | TSX
+  | TXA
+  | TXS
+  | TYA
   [@@deriving show { with_path = false }]
