@@ -28,12 +28,14 @@ type instruction =
   | LDA
   | LDX
   | LDY
+  | LSR
   | NOP
   | ORA
   | PHA
   | PHP
   | PLA
   | PLP
+  | RTI
   | RTS
   | SBC
   | SEC

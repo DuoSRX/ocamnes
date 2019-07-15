@@ -88,7 +88,7 @@ let flags_to_int cpu =
 module AddressingMode = struct
   type t =
     | Implicit | Absolute | AbsoluteX | AbsoluteY
-    | ZeroPage | ZeroPageX | ZeroPageY
+    | ZeroPage | ZeroPageX | ZeroPageY | Accumulator
     | Relative | IndirectX | IndirectY | Immediate
     [@@deriving show]
 end
@@ -108,9 +108,16 @@ let decode_addressing_mode cpu am =
     (load_byte cpu address, Some address, 1)
   | AddressingMode.Relative ->
     (load_byte cpu pc, Some pc, 1)
+  | AddressingMode.Accumulator ->
+    (cpu.a, None, 0)
   | AddressingMode.Implicit ->
     (0, None, 0)
   | _ -> failwith "unimplemented addressing mode"
+
+let write_target cpu target value =
+  match target with
+  | None -> cpu.a <- value
+  | Some addr -> store_byte cpu addr value
 
 let set_nz_flags cpu value =
   cpu.zero <- value = 0;
@@ -137,19 +144,12 @@ let lda c args = c.a <- set_nz_flags c args
 let ldx c args = c.x <- set_nz_flags c args
 let ldy c args = c.y <- set_nz_flags c args
 
-let brk _ = failwith "oh no"
+let brk _ = failwith "oh no BRK"
 (* let brk cpu =
   push_word cpu (cpu.pc + 2);
   push_byte cpu @@ (flags_to_int cpu) lor Flags.b;
   cpu.interrupt <- true;
   cpu.pc <- load_word cpu 0xFFEE *)
-
-let jsr cpu address =
-  (* printf "PUSHING FOR JSR @ %04X\n" (wrapping_add_w cpu.pc 3); *)
-  push_word cpu (wrapping_add_w cpu.pc 3);
-  cpu.pc <- address
-
-let rts cpu = cpu.pc <- pop_word cpu
 
 let branch cpu offset cond =
   if cond then
@@ -191,9 +191,19 @@ let plp cpu =
 
 let pla cpu = cpu.a <- set_nz_flags cpu (pop_byte cpu)
 
-let andd cpu args = cpu.a <- set_nz_flags cpu (cpu.a land args)
+let and_op cpu args = cpu.a <- set_nz_flags cpu (cpu.a land args)
 let ora cpu args = cpu.a <- set_nz_flags cpu (cpu.a lor args)
 let eor cpu args = cpu.a <- set_nz_flags cpu (cpu.a lxor args)
+
+let lsr_op cpu args target =
+  cpu.carry <- args land 1 > 0;
+  let result = set_nz_flags cpu (args lsr 1) in
+  write_target cpu target result
+
+let asl_op cpu args target =
+  cpu.carry <- args land 0x80 > 0;
+  let result = set_nz_flags cpu ((args lsl 1) land 0xFF) in
+  write_target cpu target result
 
 let compare_op cpu a b =
   let result = wrapping_sub a b in
@@ -214,6 +224,16 @@ let adc cpu args =
 
 let sbc cpu args = adc cpu (args lxor 0xFF)
 
+let jsr cpu address =
+  push_word cpu (wrapping_add_w cpu.pc 2);
+  cpu.pc <- address
+
+let rts cpu = cpu.pc <- (pop_word cpu) + 1
+
+let rti cpu =
+  plp cpu;
+  cpu.pc <- pop_word cpu
+
 type instr = {
   op : Instructions.instruction;
   mode : AddressingMode.t;
@@ -228,7 +248,7 @@ let op_is_write = function
   | _ -> false
 
 let should_change_pc = function
-  | JMP | JSR | RTS -> false
+  | JMP | JSR | RTS | RTI -> false
   | _ -> true
 
 let args_to_string i =
@@ -241,6 +261,7 @@ let args_to_string i =
       sprintf "$%04X" (Option.value_exn i.target)
   | ZeroPage -> sprintf "$%02X = %02X" (Option.value_exn i.target) i.args
   | Relative -> sprintf "$%04X" ((Option.value_exn i.target) + i.args + 1)
+  | Accumulator -> "A"
   | Implicit -> ""
   | _ -> failwith @@ sprintf "can't print %s" @@ show_instr i
 
@@ -255,7 +276,7 @@ let args_to_hex_string i =
   | Absolute -> word_to_byte_string (Option.value_exn i.target)
   | ZeroPage -> sprintf "%02X" (Option.value_exn i.target)
   | Relative -> sprintf "%02X" i.args
-  | Implicit -> ""
+  | Accumulator | Implicit -> ""
   | _ -> failwith @@ sprintf "can't print %s" @@ show_instr i
 
 let decode opcode =
@@ -263,6 +284,7 @@ let decode opcode =
   | 0x00 -> (BRK, Implicit, 7)
   | 0x08 -> (PHP, Implicit, 3)
   | 0x09 -> (ORA, Immediate, 2)
+  | 0x0A -> (ASL, Accumulator, 2)
   | 0x10 -> (BPL, Relative, 2)
   | 0x18 -> (CLC, Implicit, 2)
   | 0x20 -> (JSR, Absolute, 6)
@@ -271,8 +293,10 @@ let decode opcode =
   | 0x29 -> (AND, Immediate, 2)
   | 0x30 -> (BMI, Relative, 2)
   | 0x38 -> (SEC, Implicit, 2)
+  | 0x40 -> (RTI, Implicit, 6)
   | 0x48 -> (PHA, Implicit, 3)
   | 0x49 -> (EOR, Immediate, 2)
+  | 0x4A -> (LSR, Accumulator, 2)
   | 0x4C -> (JMP, Absolute, 3)
   | 0x50 -> (BVC, Relative, 2)
   | 0x60 -> (RTS, Implicit, 6)
@@ -321,7 +345,8 @@ let execute_instruction cpu instruction =
   let args = instruction.args in
   match instruction.op with
   | ADC -> adc cpu args
-  | AND -> andd cpu args
+  | AND -> and_op cpu args
+  | ASL -> asl_op cpu args instruction.target
   | BCS -> bcs cpu args
   | BCC -> bcc cpu args
   | BEQ -> beq cpu args
@@ -348,12 +373,14 @@ let execute_instruction cpu instruction =
   | LDA -> lda cpu args
   | LDX -> ldx cpu args
   | LDY -> ldy cpu args
+  | LSR -> lsr_op cpu args instruction.target
   | NOP -> ()
   | ORA -> ora cpu args
   | PHA -> push_byte cpu cpu.a
   | PHP -> php cpu
   | PLA -> pla cpu
   | PLP -> plp cpu
+  | RTI -> rti cpu
   | RTS -> rts cpu
   | SBC -> sbc cpu args
   | SEC -> cpu.carry <- true
@@ -368,4 +395,4 @@ let execute_instruction cpu instruction =
   | TXA -> txa cpu
   | TXS -> txs cpu
   | TYA -> tya cpu
-  | _ -> failwith @@ sprintf "Unimplemented instruction %s" (show_instruction instruction.op)
+  (* | _ -> failwith @@ sprintf "Unimplemented instruction %s" (show_instruction instruction.op) *)

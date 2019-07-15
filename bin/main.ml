@@ -20,7 +20,7 @@ let main () =
 
   let cycles = ref 0 in
   let steps = ref 0 in
-  while !steps < 1000 do
+  while !steps < 10000 do
     let opcode = load_byte cpu cpu.pc in
     let instruction = decode_instruction cpu opcode in
     let str_op = Instructions.show_instruction instruction.op in
