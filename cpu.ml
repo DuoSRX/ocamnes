@@ -10,9 +10,11 @@ module Flags = struct
   let break5 = 0b00100000
   let overflow = 0b01000000
   let negative = 0b10000000
+  let b = break4 lor break5
 end
 
 let wrapping_add a b = (a + b) land 0xFF
+let wrapping_add_w a b = (a + b) land 0xFFFF
 
 type cpu = {
   mutable a : int;
@@ -21,7 +23,7 @@ type cpu = {
   mutable pc : int;
   mutable s : int;
 
-  mutable sign : bool;
+  mutable negative : bool;
   mutable overflow : bool;
   mutable decimal : bool;
   mutable interrupt : bool;
@@ -51,7 +53,7 @@ let store_byte cpu address value =
 
 let store_word cpu address value =
   let lo = value land 0xFF in
-  let hi = (value lsl 8) land 0xFF in
+  let hi = (value lsr 8) land 0xFF in
   store_byte cpu address lo;
   store_byte cpu (address + 1) hi
 
@@ -65,9 +67,19 @@ let push_word cpu value =
   store_word cpu (0x100 + sp) value;
   cpu.s <- wrapping_add cpu.s (-2)
 
+let pop_byte cpu =
+  let byte = load_byte cpu (0x100 + cpu.s + 1) in
+  cpu.s <- wrapping_add cpu.s 1;
+  byte
+
+let pop_word cpu =
+  let word = load_word cpu (0x100 + cpu.s + 1) in
+  cpu.s <- wrapping_add cpu.s 2;
+  word
+
 let flags_to_int cpu =
   let p = ref Flags.break5 in
-  if cpu.sign then p := !p lor Flags.negative;
+  if cpu.negative then p := !p lor Flags.negative;
   if cpu.overflow then p := !p lor Flags.overflow;
   if cpu.decimal then p := !p lor Flags.decimal;
   if cpu.interrupt then p := !p lor Flags.interrupt;
@@ -102,7 +114,7 @@ let decode_addressing_mode cpu am =
 
 let set_nz_flags cpu value =
   cpu.zero <- value = 0;
-  cpu.sign <- value land 0x80 <> 0;
+  cpu.negative <- value land 0x80 <> 0;
   value
 
 let tax c = c.a <- set_nz_flags c c.x
@@ -124,8 +136,14 @@ let sty c addr = store_byte c addr c.y
 let lda c args = c.a <- set_nz_flags c args
 let ldx c args = c.x <- set_nz_flags c args
 
+let brk cpu =
+  push_word cpu (cpu.pc + 2);
+  push_byte cpu @@ (flags_to_int cpu) lor Flags.b;
+  cpu.interrupt <- true;
+  cpu.pc <- load_word cpu 0xFFEE
+
 let jsr cpu address =
-  push_word cpu cpu.pc;
+  push_word cpu (wrapping_add_w cpu.pc 3);
   cpu.pc <- address
 
 let branch cpu offset cond =
@@ -142,14 +160,23 @@ let bcs cpu offset = branch cpu offset cpu.carry
 let bcc cpu offset = branch cpu offset (not cpu.carry)
 let beq cpu offset = branch cpu offset cpu.zero
 let bne cpu offset = branch cpu offset (not cpu.zero)
+let bpl cpu offset = branch cpu offset (not cpu.negative)
 let bvs cpu offset = branch cpu offset cpu.overflow
 let bvc cpu offset = branch cpu offset (not cpu.overflow)
 
 let bit cpu byte =
   let result = cpu.a land byte in
-  cpu.sign <- Flags.negative land result <> 0;
+  cpu.negative <- Flags.negative land result <> 0;
   cpu.overflow <- Flags.overflow land result <> 0;
-  cpu.zero <- result = 0;
+  cpu.zero <- result = 0
+
+let php cpu =
+  let flags = (flags_to_int cpu) lor (Flags.b) in
+  push_byte cpu flags
+
+let pla cpu = cpu.a <- set_nz_flags cpu (pop_byte cpu)
+
+let andd cpu args = cpu.a <- set_nz_flags cpu (cpu.a land args)
 
 type instr = {
   op : Instructions.instruction;
@@ -191,13 +218,20 @@ open AddressingMode
 
 let decode opcode =
   match opcode with
+  | 0x00 -> (BRK, Implicit, 7)
+  | 0x08 -> (PHP, Implicit, 3)
+  | 0x10 -> (BPL, Relative, 2)
   | 0x18 -> (CLC, Implicit, 2)
   | 0x20 -> (JSR, Absolute, 6)
   | 0x24 -> (BIT, ZeroPage, 3)
+  | 0x29 -> (AND, Immediate, 2)
   | 0x38 -> (SEC, Implicit, 2)
   | 0x4C -> (JMP, Absolute, 3)
   | 0x50 -> (BVC, Relative, 2)
+  | 0x60 -> (RTS, Implicit, 6)
+  | 0x68 -> (PLA, Implicit, 4)
   | 0x70 -> (BVS, Relative, 2)
+  | 0x78 -> (SEI, Implicit, 2)
   | 0x85 -> (STA, ZeroPage, 3)
   | 0x86 -> (STX, ZeroPage, 3)
   | 0x90 -> (BCC, Relative, 2)
@@ -207,6 +241,7 @@ let decode opcode =
   | 0xD0 -> (BNE, Relative, 2)
   | 0xEA -> (NOP, Implicit, 2)
   | 0xF0 -> (BEQ, Relative, 2)
+  | 0xF8 -> (SED, Implicit, 2)
   | _ -> failwith @@ sprintf "Unknown opcode %#02x" opcode
 
 let decode_instruction cpu instruction =
@@ -217,11 +252,14 @@ let decode_instruction cpu instruction =
 let execute_instruction cpu instruction =
   let args = instruction.args in
   match instruction.op with
+  | AND -> andd cpu args
   | BCS -> bcs cpu args
   | BCC -> bcc cpu args
   | BEQ -> beq cpu args
   | BIT -> bit cpu args
   | BNE -> bne cpu args
+  | BPL -> bpl cpu args
+  | BRK -> brk cpu
   | BVS -> bvs cpu args
   | BVC -> bvc cpu args
   | CLC -> cpu.carry <- false
@@ -230,7 +268,12 @@ let execute_instruction cpu instruction =
   | LDA -> lda cpu args
   | LDX -> ldx cpu args
   | NOP -> ()
+  | PHP -> php cpu
+  | PLA -> pla cpu
+  | RTS -> cpu.pc <- pop_word cpu
   | SEC -> cpu.carry <- true
+  | SED -> cpu.decimal <- true
+  | SEI -> cpu.interrupt <- true
   | STA -> sta cpu (Option.value_exn instruction.target)
   | STX -> stx cpu (Option.value_exn instruction.target)
   | STY -> sty cpu (Option.value_exn instruction.target)

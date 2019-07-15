@@ -18,8 +18,12 @@ type instruction =
   | LDA
   | LDX
   | NOP
+  | PHP
+  | PLA
   | RTS
   | SEC
+  | SED
+  | SEI
   | STA
   | STX
   | STY

@@ -54,7 +54,7 @@ let main () =
   load_rom_into_memory memory rom;
   let cpu = {
     a = 0; x = 0; y = 0; memory; s = 0xFD; pc = 0; extra_cycles = 0;
-    zero = false; sign = false; carry = false; decimal = false; interrupt = true; overflow = false } in
+    zero = false; negative = false; carry = false; decimal = false; interrupt = true; overflow = false } in
   (* let start = memory.(0xFFFC) lor (memory.(0xFFFD) lsl 8) in *)
   let start = 0xC000 in
   cpu.pc <- start;
@@ -70,12 +70,14 @@ let main () =
     let cy = !cycles * 3 mod 341 in
     let status = sprintf "A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%3d" cpu.a cpu.x cpu.y (flags_to_int cpu) cpu.s cy in
     let log = sprintf "%04X  %02X %-6s %-31s %s" cpu.pc opcode str_args instr status in
+    print_endline log;
 
     let nestest_log = nestest.(!steps) in
     if not (String.equal log nestest_log) then (
-      print_endline "Nestest discrepancy detected";
+      print_endline "";
       print_endline nestest_log;
       print_endline log;
+      failwith "Nestest discrepancy detected";
     );
 
     execute_instruction cpu instruction;
