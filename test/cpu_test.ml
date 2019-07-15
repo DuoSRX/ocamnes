@@ -1,24 +1,24 @@
-(* module To_test = struct
-  let capit letter = Char.uppercase_ascii letter
-  let plus int_list = List.fold_left (fun a b -> a + b) 0 int_list
-end
+open Core
+open Nes.Cpu
 
-(* The tests *)
-let capit () =
-  Alcotest.(check char) "same chars"  'A' (To_test.capit 'a')
+(* Yeah this doesn't work... *)
 
-let plus () =
-  Alcotest.(check int) "same ints" 7 (To_test.plus [1;1;2;3])
+let make_cpu () =
+  let memory = Array.create ~len:0x10000 0 in
+  {
+    a = 0; x = 0; y = 0; memory; s = 0xFD; pc = 0; extra_cycles = 0;
+    zero = false; negative = false; carry = false; decimal = false; interrupt = true; overflow = false
+  }
+
+let jmp () =
+  let cpu = make_cpu () in
+  Alcotest.(check int) "same pc" 0x0 cpu.pc
 
 let test_set = [
-  "Capitalize" , `Quick, capit;
-  "Add entries", `Slow , plus ;
+  "JMP", `Quick, jmp;
 ]
 
-(* Run it *)
 let () =
-  Alcotest.run "My first test" [
+  Alcotest.run "CPU tests" [
     "test_set", test_set;
-  ] *)
-
-let _ = print_endline "totally testing"
+  ]
