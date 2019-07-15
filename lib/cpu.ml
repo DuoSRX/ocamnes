@@ -205,6 +205,18 @@ let asl_op cpu args target =
   let result = set_nz_flags cpu ((args lsl 1) land 0xFF) in
   write_target cpu target result
 
+let ror cpu args target =
+  let carry = if cpu.carry then 0x80 else 0 in
+  let result = (args lsr 1) lor carry in
+  cpu.carry <- args lor 1 > 0;
+  write_target cpu target (set_nz_flags cpu result)
+
+let rol cpu args target =
+  let carry = if cpu.carry then 1 else 0 in
+  let result = ((args lsl 1) lor carry) land 0xFF in
+  cpu.carry <- args land 0x80 > 0;
+  write_target cpu target (set_nz_flags cpu result)
+
 let compare_op cpu a b =
   let result = wrapping_sub a b in
   cpu.carry <- a >= b;
@@ -291,6 +303,7 @@ let decode opcode =
   | 0x24 -> (BIT, ZeroPage, 3)
   | 0x28 -> (PLP, Implicit, 4)
   | 0x29 -> (AND, Immediate, 2)
+  | 0x2A -> (ROL, Accumulator, 2)
   | 0x30 -> (BMI, Relative, 2)
   | 0x38 -> (SEC, Implicit, 2)
   | 0x40 -> (RTI, Implicit, 6)
@@ -302,6 +315,7 @@ let decode opcode =
   | 0x60 -> (RTS, Implicit, 6)
   | 0x68 -> (PLA, Implicit, 4)
   | 0x69 -> (ADC, Immediate, 2)
+  | 0x6A -> (ROR, Accumulator, 2)
   | 0x70 -> (BVS, Relative, 2)
   | 0x78 -> (SEI, Implicit, 2)
   | 0x85 -> (STA, ZeroPage, 3)
@@ -380,6 +394,8 @@ let execute_instruction cpu instruction =
   | PHP -> php cpu
   | PLA -> pla cpu
   | PLP -> plp cpu
+  | ROL -> rol cpu args instruction.target
+  | ROR -> ror cpu args instruction.target
   | RTI -> rti cpu
   | RTS -> rts cpu
   | SBC -> sbc cpu args

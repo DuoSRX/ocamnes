@@ -35,6 +35,8 @@ type instruction =
   | PHP
   | PLA
   | PLP
+  | ROR
+  | ROL
   | RTI
   | RTS
   | SBC
