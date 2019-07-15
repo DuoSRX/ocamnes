@@ -13,13 +13,17 @@ type instruction =
   | BVC
   | BVS
   | CLC
+  | CLD
+  | CMP
   | JMP
   | JSR
   | LDA
   | LDX
   | NOP
+  | PHA
   | PHP
   | PLA
+  | PLP
   | RTS
   | SEC
   | SED
