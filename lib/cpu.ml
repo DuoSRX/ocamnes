@@ -119,15 +119,11 @@ let set_nz_flags cpu value =
 
 let tax c = c.a <- set_nz_flags c c.x
 let txa c = c.x <- set_nz_flags c c.a
-let inx c = c.x <- set_nz_flags c (wrapping_add c.x 1)
-let dex c = c.x <- set_nz_flags c (wrapping_add c.x (-1))
 
-(* let inc cpu loc =
-  let value = wrapping_add (Location.load cpu loc) 1 in
-  Location.store cpu ((set_nz_flags cpu value) land 0xFF) loc
-let dec cpu loc =
-  let value = wrapping_add (Location.load cpu loc) (-1) in
-  Location.store cpu ((set_nz_flags cpu value) land 0xFF) loc *)
+let dex c = c.x <- set_nz_flags c @@ wrapping_sub c.x 1
+let dey c = c.y <- set_nz_flags c @@ wrapping_sub c.y 1
+let inx c = c.x <- set_nz_flags c @@ wrapping_add c.x 1
+let iny c = c.y <- set_nz_flags c @@ wrapping_add c.y 1
 
 let jmp c dst = c.pc <- dst
 let sta c addr = store_byte c addr c.a
@@ -135,6 +131,7 @@ let stx c addr = store_byte c addr c.x
 let sty c addr = store_byte c addr c.y
 let lda c args = c.a <- set_nz_flags c args
 let ldx c args = c.x <- set_nz_flags c args
+let ldy c args = c.y <- set_nz_flags c args
 
 let brk cpu =
   push_word cpu (cpu.pc + 2);
@@ -191,12 +188,26 @@ let pla cpu = cpu.a <- set_nz_flags cpu (pop_byte cpu)
 
 let andd cpu args = cpu.a <- set_nz_flags cpu (cpu.a land args)
 let ora cpu args = cpu.a <- set_nz_flags cpu (cpu.a lor args)
+let eor cpu args = cpu.a <- set_nz_flags cpu (cpu.a lxor args)
 
-let cmp cpu args =
-  let result = wrapping_sub cpu.a args in
-  cpu.carry <- cpu.a >= args;
-  cpu.zero <- cpu.a = args;
+let compare_op cpu a b =
+  let result = wrapping_sub a b in
+  cpu.carry <- a >= b;
+  cpu.zero <- a = b;
   cpu.negative <- result > 127
+
+let cmp cpu args = compare_op cpu cpu.a args
+let cpx cpu args = compare_op cpu cpu.x args
+let cpy cpu args = compare_op cpu cpu.y args
+
+let adc cpu args =
+  let sum = cpu.a + args + Bool.to_int cpu.carry in
+  cpu.carry <- sum > 0xFF;
+  (* Oh boy... *)
+  cpu.overflow <- (lnot (cpu.a lxor args)) land (cpu.a lxor sum) land 0x80 > 0;
+  cpu.a <- set_nz_flags cpu (sum mod 0x100)
+
+let sbc cpu args = adc cpu (args lxor 0xFF)
 
 type instr = {
   op : Instructions.instruction;
@@ -248,22 +259,32 @@ let decode opcode =
   | 0x30 -> (BMI, Relative, 2)
   | 0x38 -> (SEC, Implicit, 2)
   | 0x48 -> (PHA, Implicit, 3)
+  | 0x49 -> (EOR, Immediate, 2)
   | 0x4C -> (JMP, Absolute, 3)
   | 0x50 -> (BVC, Relative, 2)
   | 0x60 -> (RTS, Implicit, 6)
   | 0x68 -> (PLA, Implicit, 4)
+  | 0x69 -> (ADC, Immediate, 2)
   | 0x70 -> (BVS, Relative, 2)
   | 0x78 -> (SEI, Implicit, 2)
   | 0x85 -> (STA, ZeroPage, 3)
   | 0x86 -> (STX, ZeroPage, 3)
+  | 0x88 -> (DEY, Implicit, 2)
   | 0x90 -> (BCC, Relative, 2)
+  | 0xA0 -> (LDY, Immediate, 2)
   | 0xA2 -> (LDX, Immediate, 2)
   | 0xA9 -> (LDA, Immediate, 2)
   | 0xB0 -> (BCS, Relative, 2)
   | 0xB8 -> (CLV, Implicit, 2)
+  | 0xC0 -> (CPY, Immediate, 2)
+  | 0xC8 -> (INY, Implicit, 2)
   | 0xC9 -> (CMP, Immediate, 2)
+  | 0xCA -> (DEX, Implicit, 2)
   | 0xD0 -> (BNE, Relative, 2)
   | 0xD8 -> (CLD, Implicit, 2)
+  | 0xE0 -> (CPX, Immediate, 2)
+  | 0xE8 -> (INX, Implicit, 2)
+  | 0xE9 -> (SBC, Immediate, 2)
   | 0xEA -> (NOP, Implicit, 2)
   | 0xF0 -> (BEQ, Relative, 2)
   | 0xF8 -> (SED, Implicit, 2)
@@ -277,6 +298,7 @@ let decode_instruction cpu instruction =
 let execute_instruction cpu instruction =
   let args = instruction.args in
   match instruction.op with
+  | ADC -> adc cpu args
   | AND -> andd cpu args
   | BCS -> bcs cpu args
   | BCC -> bcc cpu args
@@ -292,10 +314,18 @@ let execute_instruction cpu instruction =
   | CLD -> cpu.decimal <- false
   | CLV -> cpu.overflow <- false
   | CMP -> cmp cpu args
+  | CPX -> cpx cpu args
+  | CPY -> cpy cpu args
+  | DEX -> dex cpu
+  | DEY -> dey cpu
+  | EOR -> eor cpu args
+  | INX -> inx cpu
+  | INY -> iny cpu
   | JMP -> jmp cpu (Option.value_exn instruction.target)
   | JSR -> jsr cpu (Option.value_exn instruction.target)
   | LDA -> lda cpu args
   | LDX -> ldx cpu args
+  | LDY -> ldy cpu args
   | NOP -> ()
   | ORA -> ora cpu args
   | PHA -> push_byte cpu cpu.a
@@ -303,6 +333,7 @@ let execute_instruction cpu instruction =
   | PLA -> pla cpu
   | PLP -> plp cpu
   | RTS -> rts cpu
+  | SBC -> sbc cpu args
   | SEC -> cpu.carry <- true
   | SED -> cpu.decimal <- true
   | SEI -> cpu.interrupt <- true

@@ -15,11 +15,19 @@ type instruction =
   | CLC
   | CLD
   | CLV
+  | CPX
+  | CPY
   | CMP
+  | DEX
+  | DEY
+  | EOR
+  | INX
+  | INY
   | JMP
   | JSR
   | LDA
   | LDX
+  | LDY
   | NOP
   | ORA
   | PHA
@@ -27,6 +35,7 @@ type instruction =
   | PLA
   | PLP
   | RTS
+  | SBC
   | SEC
   | SED
   | SEI
