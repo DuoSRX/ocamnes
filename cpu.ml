@@ -66,7 +66,7 @@ let push_word cpu value =
   cpu.s <- wrapping_add cpu.s (-2)
 
 let flags_to_int cpu =
-  let p = ref (Flags.break4 land Flags.break5) in
+  let p = ref Flags.break5 in
   if cpu.sign then p := !p lor Flags.negative;
   if cpu.overflow then p := !p lor Flags.overflow;
   if cpu.decimal then p := !p lor Flags.decimal;
@@ -114,15 +114,13 @@ let dex c = c.x <- set_nz_flags c (wrapping_add c.x (-1))
   Location.store cpu ((set_nz_flags cpu value) land 0xFF) loc
 let dec cpu loc =
   let value = wrapping_add (Location.load cpu loc) (-1) in
-  Location.store cpu ((set_nz_flags cpu value) land 0xFF) loc
-
-let sta c loc = Location.store c c.a loc
-let stx c loc = Location.store c c.x loc
-let sty c loc = Location.store c c.y loc *)
+  Location.store cpu ((set_nz_flags cpu value) land 0xFF) loc *)
 
 let jmp c dst = c.pc <- dst
-let stx c args = c.x <- args
-let lda c args = c.x <- set_nz_flags c args
+let sta c addr = store_byte c addr c.a
+let stx c addr = store_byte c addr c.x
+let sty c addr = store_byte c addr c.y
+let lda c args = c.a <- set_nz_flags c args
 let ldx c args = c.x <- set_nz_flags c args
 
 let jsr cpu address =
@@ -142,7 +140,15 @@ let branch cpu offset cond =
 let bcs cpu offset = branch cpu offset cpu.carry
 let bcc cpu offset = branch cpu offset (not cpu.carry)
 let beq cpu offset = branch cpu offset cpu.zero
-let bnq cpu offset = branch cpu offset (not cpu.zero)
+let bne cpu offset = branch cpu offset (not cpu.zero)
+let bvs cpu offset = branch cpu offset cpu.overflow
+let bvc cpu offset = branch cpu offset (not cpu.overflow)
+
+let bit cpu byte =
+  let result = cpu.a land byte in
+  cpu.sign <- Flags.negative land result <> 0;
+  cpu.overflow <- Flags.overflow land result <> 0;
+  cpu.zero <- result = 0;
 
 type instruction = {
   op : Instructions.instruction;
@@ -165,18 +171,25 @@ let should_change_pc = function
   | JMP | JSR | RTS -> false
   | _ -> true
 
+open AddressingMode
+
 let decode opcode =
   match opcode with
-  | 0x4C -> (JMP, AddressingMode.Absolute, 3)
+  | 0x18 -> (CLC, Implicit, 2)
+  | 0x20 -> (JSR, Absolute, 6)
+  | 0x24 -> (BIT, ZeroPage, 3)
+  | 0x38 -> (SEC, Implicit, 2)
+  | 0x4C -> (JMP, Absolute, 3)
+  | 0x50 -> (BVC, Relative, 2)
+  | 0x70 -> (BVS, Relative, 2)
+  | 0x85 -> (STA, ZeroPage, 3)
+  | 0x86 -> (STX, ZeroPage, 3)
+  | 0x90 -> (BCC, Relative, 2)
   | 0xA9 -> (LDA, Immediate, 2)
   | 0xA2 -> (LDX, Immediate, 2)
-  | 0x86 -> (STX, ZeroPage, 3)
-  | 0x20 -> (JSR, Absolute, 6)
-  | 0xEA -> (NOP, Implicit, 2)
-  | 0x38 -> (SEC, Implicit, 2)
   | 0xB0 -> (BCS, Relative, 2)
-  | 0x18 -> (CLC, Implicit, 2)
-  | 0x90 -> (BCC, Relative, 2)
+  | 0xD0 -> (BNE, Relative, 2)
+  | 0xEA -> (NOP, Implicit, 2)
   | 0xF0 -> (BEQ, Relative, 2)
   | _ -> failwith @@ sprintf "Unknown opcode %#02x" opcode
 
@@ -188,15 +201,21 @@ let decode_instruction cpu instruction =
 let execute_instruction cpu instruction =
   let args = instruction.args in
   match instruction.op with
-  | BCS -> bcs cpu instruction.args
-  | BCC -> bcc cpu instruction.args
-  | BEQ -> beq cpu instruction.args
+  | BCS -> bcs cpu args
+  | BCC -> bcc cpu args
+  | BEQ -> beq cpu args
+  | BIT -> bit cpu args
+  | BNE -> bne cpu args
+  | BVS -> bvs cpu args
+  | BVC -> bvc cpu args
+  | CLC -> cpu.carry <- false
   | JMP -> jmp cpu (Option.value_exn instruction.target)
   | JSR -> jsr cpu (Option.value_exn instruction.target)
   | LDA -> lda cpu args
   | LDX -> ldx cpu args
   | NOP -> ()
   | SEC -> cpu.carry <- true
-  | STX -> stx cpu args
-  | CLC -> cpu.carry <- false
+  | STA -> sta cpu (Option.value_exn instruction.target)
+  | STX -> stx cpu (Option.value_exn instruction.target)
+  | STY -> sty cpu (Option.value_exn instruction.target)
   | _ -> failwith @@ sprintf "Unimplemented instruction %s" (show_instruction instruction.op)
