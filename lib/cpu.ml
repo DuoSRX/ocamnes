@@ -37,20 +37,28 @@ type cpu = {
   memory : int array;
 }
 
+(* TODO: Handle RAM mirroring *)
 let load_byte cpu address =
-  cpu.memory.(address)
+  if (address lsr 13) = 1 then
+    0 (* TODO: PPU READ *)
+  else
+    cpu.memory.(address)
 
+(* TODO: Handle RAM mirroring *)
 let store_byte cpu address value =
-  cpu.memory.(address) <- value
+  if (address lsr 13) = 1 then
+    () (* TODO: PPU WRITE *)
+  else
+    cpu.memory.(address) <- value
 
 let load_word cpu address =
-  let a = cpu.memory.(address) in
-  let b = cpu.memory.(address + 1) in
+  let a = load_byte cpu address in
+  let b = load_byte cpu (address + 1) in
   a lor b lsl 8
 
 let load_word_zero_page cpu address =
-  let a = cpu.memory.(address) in
-  let b = cpu.memory.(wrapping_add address 1) in
+  let a = load_byte cpu address in
+  let b = load_byte cpu (wrapping_add address 1) in
   a lor b lsl 8
 
 let store_word cpu address value =
