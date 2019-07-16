@@ -25,10 +25,12 @@ let main () =
     let instruction = decode_instruction cpu opcode in
     let str_op = Instructions.show_instruction instruction.op in
     let instr = sprintf "%s %s" str_op (args_to_string cpu instruction) in
-    let str_args = args_to_hex_string cpu instruction in
+    (* Horrible hack to comform to Nestest output logs... *)
+    let instr2 = if (instruction.op = NOP) && opcode <> 0xEA then sprintf "*%s " instr else sprintf " %s" instr in
+    let args = args_to_hex_string cpu instruction in
     let cy = !cycles * 3 mod 341 in
     let status = sprintf "A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%3d" cpu.a cpu.x cpu.y (flags_to_int cpu) cpu.s cy in
-    let log = sprintf "%04X  %02X %-6s %-31s %s" cpu.pc opcode str_args instr status in
+    let log = sprintf "%04X  %02X %-6s%-32s %s" cpu.pc opcode args instr2 status in
     print_endline log;
 
     let nestest_log = nestest.(!steps) in
@@ -36,7 +38,7 @@ let main () =
       print_endline "";
       print_endline nestest_log;
       print_endline log;
-      failwith @@ sprintf "Nestest discrepancy detected @ PC = %04X" cpu.pc;
+      failwith @@ sprintf "Nestest discrepancy detected @ PC = %04X, LOG = %d" cpu.pc !steps;
     );
 
     execute_instruction cpu instruction;

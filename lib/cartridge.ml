@@ -39,6 +39,8 @@ let load_rom () =
 
 let load_rom_into_memory mem rom =
   let dst_pos = 0x10000 - rom.headers.prg_size in
-  Array.blit ~len:rom.headers.prg_size ~src:rom.prg ~src_pos:0 ~dst:mem ~dst_pos
+  Array.blit ~len:rom.headers.prg_size ~src:rom.prg ~src_pos:0 ~dst:mem ~dst_pos;
+  (* TODO: Mirror while reading instead of copying the whole data twice *)
+  Array.blit ~len:rom.headers.prg_size ~src:rom.prg ~src_pos:0 ~dst:mem ~dst_pos:(dst_pos - rom.headers.prg_size)
   (* TODO: Load CHR into PPU *)
   (* Array.blit ~len:rom.headers.chr_size ~src:rom.chr ~src_pos:0 ~dst:cpu.memory ~dst_pos:0 *)
