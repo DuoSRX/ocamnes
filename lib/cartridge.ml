@@ -25,9 +25,8 @@ let open_file name =
 let load_headers rom =
   { prg_size = rom.(4) * 0x4000; chr_size = rom.(5) * 0x2000 }
 
-let load_rom () =
-  let filename = "./nestest.nes" in
-  let rom = open_file filename in
+let load_rom path =
+  let rom = open_file path in
   let headers = load_headers rom in
   (* printf "Loaded rom %s\n" filename;
   printf "PRG:%04x CHR:%04x\n" headers.prg_size headers.chr_size; *)
