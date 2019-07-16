@@ -1,8 +1,8 @@
-open Core
+(* open Core
 open OUnit2
-open Nes.Cpu
+open Nes.Cpu *)
 
-let make_cpu () =
+(* let make_cpu () =
   let memory = Array.create ~len:0x10000 0 in
   {
     a = 0; x = 0; y = 0; memory; s = 0xFD; pc = 0; extra_cycles = 0;
@@ -27,4 +27,4 @@ let tests = "test suite for CPU" >::: [
   "stack words" >:: push_word_test;
 ]
 
-let () = run_test_tt_main tests
+let () = run_test_tt_main tests *)
