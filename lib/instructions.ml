@@ -18,9 +18,11 @@ type instruction =
   | CPX
   | CPY
   | CMP
+  | DEC
   | DEX
   | DEY
   | EOR
+  | INC
   | INX
   | INY
   | JMP
