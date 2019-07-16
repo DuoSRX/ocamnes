@@ -108,8 +108,24 @@ let decode_addressing_mode cpu am =
   | Absolute ->
     let address = load_word cpu pc in
     (load_byte cpu address, Some address, 2)
+  | AbsoluteX ->
+    let arg = load_word cpu pc in
+    let address = wrapping_add_w arg cpu.x in
+    if page_crossed arg address then cpu.extra_cycles <- cpu.extra_cycles + 1;
+    (load_byte cpu address, Some address, 2)
+  | AbsoluteY ->
+    let arg = load_word cpu pc in
+    let address = wrapping_add_w arg cpu.y in
+    if page_crossed arg address then cpu.extra_cycles <- cpu.extra_cycles + 1;
+    (load_byte cpu address, Some address, 2)
   | ZeroPage ->
     let address = load_byte cpu pc in
+    (load_byte cpu address, Some address, 1)
+  | ZeroPageX ->
+    let address = wrapping_add (load_byte cpu pc) cpu.x in
+    (load_byte cpu address, Some address, 1)
+  | ZeroPageY ->
+    let address = wrapping_add (load_byte cpu pc) cpu.y in
     (load_byte cpu address, Some address, 1)
   | Relative ->
     (load_byte cpu pc, Some pc, 1)
@@ -128,13 +144,12 @@ let decode_addressing_mode cpu am =
     let lo = load_byte cpu address in
     let hi = (address land 0xFF00) lor ((address + 1) land 0xFF) in
     let dest = lo lor ((load_byte cpu hi) lsl 8) in
-    (* printf "ADDR:%04X HI:%04X LO:%02X DEST:%04X\n" address hi lo dest; *)
     (load_word cpu dest, Some(dest), 2)
   | Accumulator ->
     (cpu.a, None, 0)
   | Implicit ->
     (0, None, 0)
-  | _ -> failwith "unimplemented addressing mode"
+  (* | _ -> failwith @@ sprintf "unimplemented addressing mode %s" (AddressingMode.show am) *)
 
 type instr = {
   op : Instructions.instruction;
@@ -303,7 +318,17 @@ let args_to_string cpu i =
       sprintf "$%04X = %02X" (Option.value_exn i.target) i.args
     else
       sprintf "$%04X" (Option.value_exn i.target)
+  | AbsoluteX ->
+    sprintf "$%04X,X @ %04X = %02X" (load_word cpu (cpu.pc + 1)) (Option.value_exn i.target) i.args
+  | AbsoluteY ->
+    sprintf "$%04X,Y @ %04X = %02X" (load_word cpu (cpu.pc + 1)) (Option.value_exn i.target) i.args
   | ZeroPage -> sprintf "$%02X = %02X" (Option.value_exn i.target) i.args
+  | ZeroPageX ->
+    let byte = load_byte cpu (cpu.pc + 1) in
+    sprintf "$%02X,X @ %02X = %02X" byte (Option.value_exn i.target) i.args
+  | ZeroPageY ->
+    let byte = load_byte cpu (cpu.pc + 1) in
+    sprintf "$%02X,Y @ %02X = %02X" byte (Option.value_exn i.target) i.args
   | IndirectX ->
     let byte = load_byte cpu (cpu.pc + 1) in
     let sum = wrapping_add byte cpu.x in
@@ -316,7 +341,7 @@ let args_to_string cpu i =
   | Relative -> sprintf "$%04X" ((Option.value_exn i.target) + i.args + 1)
   | Accumulator -> "A"
   | Implicit -> ""
-  | _ -> failwith @@ sprintf "can't print %s" @@ show_instr i
+  (* | _ -> failwith @@ sprintf "can't print %s" @@ show_instr i *)
 
 let word_to_byte_string w =
   let lo = w land 0xFF in
@@ -326,12 +351,11 @@ let word_to_byte_string w =
 let args_to_hex_string cpu i =
   match i.mode with
   | Immediate | Relative -> sprintf "%02X" i.args
-  | IndirectX | IndirectY -> sprintf "%02X" (load_byte cpu (cpu.pc + 1))
+  | IndirectX | IndirectY | ZeroPageX | ZeroPageY -> sprintf "%02X" (load_byte cpu (cpu.pc + 1))
   | Absolute -> word_to_byte_string (Option.value_exn i.target)
-  | Indirect -> word_to_byte_string (load_word cpu (cpu.pc + 1))
+  | Indirect | AbsoluteX | AbsoluteY -> word_to_byte_string (load_word cpu (cpu.pc + 1))
   | ZeroPage -> sprintf "%02X" (Option.value_exn i.target)
   | Accumulator | Implicit -> ""
-  | _ -> failwith @@ sprintf "can't print hex %s" @@ show_instr i
 
 let decode opcode =
   match opcode with
@@ -346,7 +370,11 @@ let decode opcode =
   | 0x0E -> (ASL, Absolute, 6)
   | 0x10 -> (BPL, Relative, 2)
   | 0x11 -> (ORA, IndirectY, 5)
+  | 0x15 -> (ORA, ZeroPageX, 4)
+  | 0x16 -> (ASL, ZeroPageX, 6)
   | 0x18 -> (CLC, Implicit, 2)
+  | 0x19 -> (ORA, AbsoluteY, 4)
+  | 0x1D -> (ORA, AbsoluteX, 4)
   | 0x20 -> (JSR, Absolute, 6)
   | 0x21 -> (AND, IndirectX, 6)
   | 0x24 -> (BIT, ZeroPage, 3)
@@ -360,7 +388,11 @@ let decode opcode =
   | 0x2E -> (ROL, Absolute, 6)
   | 0x30 -> (BMI, Relative, 2)
   | 0x31 -> (AND, IndirectY, 5)
+  | 0x35 -> (AND, ZeroPageX, 4)
+  | 0x36 -> (ROL, ZeroPageX, 6)
   | 0x38 -> (SEC, Implicit, 2)
+  | 0x39 -> (AND, AbsoluteY, 4)
+  | 0x3D -> (AND, AbsoluteX, 4)
   | 0x40 -> (RTI, Implicit, 6)
   | 0x41 -> (EOR, IndirectX, 6)
   | 0x45 -> (EOR, ZeroPage, 3)
@@ -373,6 +405,10 @@ let decode opcode =
   | 0x4E -> (LSR, Absolute, 6)
   | 0x50 -> (BVC, Relative, 2)
   | 0x51 -> (EOR, IndirectY, 5)
+  | 0x55 -> (EOR, ZeroPageX, 4)
+  | 0x56 -> (LSR, ZeroPageX, 6)
+  | 0x59 -> (EOR, AbsoluteY, 4)
+  | 0x5D -> (EOR, AbsoluteX, 4)
   | 0x60 -> (RTS, Implicit, 6)
   | 0x61 -> (ADC, IndirectX, 6)
   | 0x65 -> (ADC, ZeroPage, 3)
@@ -385,7 +421,11 @@ let decode opcode =
   | 0x6E -> (ROR, Absolute, 6)
   | 0x70 -> (BVS, Relative, 2)
   | 0x71 -> (ADC, IndirectY, 5)
+  | 0x75 -> (ADC, ZeroPageX, 4)
+  | 0x76 -> (ROR, ZeroPageX, 6)
   | 0x78 -> (SEI, Implicit, 2)
+  | 0x79 -> (ADC, AbsoluteY, 4)
+  | 0x7D -> (ADC, AbsoluteX, 4)
   | 0x81 -> (STA, IndirectX, 6)
   | 0x84 -> (STY, ZeroPage, 3)
   | 0x85 -> (STA, ZeroPage, 3)
@@ -397,8 +437,13 @@ let decode opcode =
   | 0x8E -> (STX, Absolute, 4)
   | 0x90 -> (BCC, Relative, 2)
   | 0x91 -> (STA, IndirectY, 6)
+  | 0x94 -> (STY, ZeroPageX, 4)
+  | 0x95 -> (STA, ZeroPageX, 4)
   | 0x9A -> (TXS, Implicit, 2)
+  | 0x96 -> (STX, ZeroPageY, 4)
   | 0x98 -> (TYA, Implicit, 2)
+  | 0x99 -> (STA, AbsoluteY, 5)
+  | 0x9D -> (STA, AbsoluteX, 5)
   | 0xA0 -> (LDY, Immediate, 2)
   | 0xA1 -> (LDA, IndirectX, 6)
   | 0xA2 -> (LDX, Immediate, 2)
@@ -413,8 +458,14 @@ let decode opcode =
   | 0xAE -> (LDX, Absolute, 4)
   | 0xB0 -> (BCS, Relative, 2)
   | 0xB1 -> (LDA, IndirectY, 5)
+  | 0xB4 -> (LDY, ZeroPageX, 4)
+  | 0xB5 -> (LDA, ZeroPageX, 4)
+  | 0xB6 -> (LDX, ZeroPageY, 4)
   | 0xB8 -> (CLV, Implicit, 2)
+  | 0xB9 -> (LDA, AbsoluteY, 4)
   | 0xBA -> (TSX, Implicit, 2)
+  | 0xBD -> (LDA, AbsoluteX, 4)
+  | 0xBC -> (LDY, AbsoluteX, 4)
   | 0xC0 -> (CPY, Immediate, 2)
   | 0xC1 -> (CMP, IndirectX, 6)
   | 0xC4 -> (CPY, ZeroPage, 3)
@@ -428,7 +479,11 @@ let decode opcode =
   | 0xCE -> (DEC, Absolute, 6)
   | 0xD0 -> (BNE, Relative, 2)
   | 0xD1 -> (CMP, IndirectY, 5)
+  | 0xD5 -> (CMP, ZeroPageX, 4)
+  | 0xD6 -> (DEC, ZeroPageX, 6)
   | 0xD8 -> (CLD, Implicit, 2)
+  | 0xD9 -> (CMP, AbsoluteY, 4)
+  | 0xDD -> (CMP, AbsoluteX, 4)
   | 0xE0 -> (CPX, Immediate, 2)
   | 0xE1 -> (SBC, IndirectX, 6)
   | 0xE4 -> (CPX, ZeroPage, 3)
@@ -442,7 +497,11 @@ let decode opcode =
   | 0xEE -> (INC, Absolute, 6)
   | 0xF0 -> (BEQ, Relative, 2)
   | 0xF1 -> (SBC, IndirectY, 5)
+  | 0xF5 -> (SBC, ZeroPageX, 4)
+  | 0xF6 -> (INC, ZeroPageX, 6)
   | 0xF8 -> (SED, Implicit, 2)
+  | 0xF9 -> (SBC, AbsoluteY, 4)
+  | 0xFD -> (SBC, AbsoluteX, 4)
   | _ -> failwith @@ sprintf "Unknown opcode %#02x" opcode
 
 let decode_instruction cpu instruction =
