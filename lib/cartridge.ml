@@ -3,6 +3,7 @@ open Core
 type header = {
   prg_size: int;
   chr_size: int;
+  mapper : int;
 }
 
 type rom = {
@@ -23,23 +24,27 @@ let open_file name =
   result
 
 let load_headers rom =
-  { prg_size = rom.(4) * 0x4000; chr_size = rom.(5) * 0x2000 }
+  {
+    prg_size = rom.(4) * 0x4000;
+    chr_size = rom.(5) * 0x2000;
+    mapper = (rom.(7) land 0xF0) lor (rom.(6) lsr 4)
+  }
 
 let load_rom path =
   let rom = open_file path in
   let headers = load_headers rom in
-  (* printf "Loaded rom %s\n" filename;
-  printf "PRG:%04x CHR:%04x\n" headers.prg_size headers.chr_size; *)
+  printf "Loaded rom %s\n" path;
+  printf "PRG:%04x CHR:%04x Mapper:%d\n" headers.prg_size headers.chr_size headers.mapper;
   {
     headers;
     prg = Array.slice rom 0x10 (0x10 + headers.prg_size);
     chr = Array.slice rom (0x10 + headers.prg_size) (0x10 + headers.prg_size + headers.chr_size);
   }
 
-let load_rom_into_memory mem rom =
-  let dst_pos = 0x10000 - rom.headers.prg_size in
-  Array.blit ~len:rom.headers.prg_size ~src:rom.prg ~src_pos:0 ~dst:mem ~dst_pos;
+(* let load_rom_into_memory mem rom = *)
+  (* let dst_pos = 0x10000 - rom.headers.prg_size in *)
+  (* Array.blit ~len:rom.headers.prg_size ~src:rom.prg ~src_pos:0 ~dst:mem ~dst_pos; *)
   (* TODO: Mirror while reading instead of copying the whole data twice *)
-  Array.blit ~len:rom.headers.prg_size ~src:rom.prg ~src_pos:0 ~dst:mem ~dst_pos:(dst_pos - rom.headers.prg_size)
+  (* Array.blit ~len:rom.headers.prg_size ~src:rom.prg ~src_pos:0 ~dst:mem ~dst_pos:(dst_pos - rom.headers.prg_size) *)
   (* TODO: Load CHR into PPU *)
   (* Array.blit ~len:rom.headers.chr_size ~src:rom.chr ~src_pos:0 ~dst:cpu.memory ~dst_pos:0 *)

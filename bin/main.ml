@@ -8,8 +8,9 @@ let main () =
   let memory = Array.create ~len:0x10000 0 in
   (* let rom = load_rom "./donkey.nes" in *)
   let rom = load_rom "./nestest.nes" in
-  load_rom_into_memory memory rom;
+  (* load_rom_into_memory memory rom; *)
   let cpu = {
+    rom = rom;
     a = 0; x = 0; y = 0; memory; s = 0xFD; pc = 0; extra_cycles = 0;
     zero = false; negative = false; carry = false; decimal = false; interrupt = true; overflow = false } in
   (* let start = memory.(0xFFFC) lor (memory.(0xFFFD) lsl 8) in *)
@@ -18,7 +19,8 @@ let main () =
 
   let cycles = ref 0 in
   let steps = ref 0 in
-  while !steps < 10000 do
+  let term = ref false in
+  while !steps < 10000 && not !term do
     let opcode = load_byte cpu cpu.pc in
     let instruction = decode_instruction cpu opcode in
     let str_op = Instructions.show_instruction instruction.op in
@@ -44,7 +46,11 @@ let main () =
     cycles := !cycles + instruction.cycles + cpu.extra_cycles;
     steps := !steps + 1;
     cpu.extra_cycles <- 0;
+
+    if cpu.pc = 0xE543 then term := true
   done;
+
+  print_endline "Nestest run successful";
 
   ()
 

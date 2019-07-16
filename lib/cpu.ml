@@ -35,21 +35,24 @@ type cpu = {
   mutable extra_cycles: int;
 
   memory : int array;
+  rom : Cartridge.rom
 }
 
-(* TODO: Handle RAM mirroring *)
 let load_byte cpu address =
-  if (address lsr 13) = 1 then
+  if address < 0x2000 then
+    cpu.memory.(address land 0x7FF)
+  else if (address lsr 13) = 1 then
     0 (* TODO: PPU READ *)
   else
-    cpu.memory.(address)
+    cpu.rom.prg.(address land 0x3FFF)
 
-(* TODO: Handle RAM mirroring *)
 let store_byte cpu address value =
-  if (address lsr 13) = 1 then
+  if address < 0x2000 then
+    cpu.memory.(address land 0x7FF) <- value
+  else if (address lsr 13) = 1 then
     () (* TODO: PPU WRITE *)
   else
-    cpu.memory.(address) <- value
+    cpu.rom.prg.(address land 0x3FFF) <- value
 
 let load_word cpu address =
   let a = load_byte cpu address in
