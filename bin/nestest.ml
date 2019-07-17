@@ -15,7 +15,8 @@ let trace cpu instruction opcode =
   let cy = cpu.cycles * 3 mod 341 in
   let status = sprintf "A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%3d" cpu.a cpu.x cpu.y (flags_to_int cpu) cpu.s cy in
   let log = sprintf "%04X  %02X %-6s%-32s %s" cpu.pc opcode args instr2 status in
-  logs.(!steps % 10) <- log
+  logs.(!steps % 10) <- log;
+  log
 
 let main () =
   let nestest = In_channel.read_lines "./nestest.log" |> Array.of_list in

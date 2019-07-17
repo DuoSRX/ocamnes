@@ -321,9 +321,9 @@ let op_is_branch = function
   | BCC | BCS | BEQ | BNE | BPL -> false
   | _ -> true
 
-let should_change_pc = function
+(* let should_change_pc = function
   | JMP | JSR | RTS | RTI -> false
-  | _ -> true
+  | _ -> true *)
 
 let args_to_string cpu i =
   match i.mode with
@@ -371,6 +371,15 @@ let args_to_hex_string cpu i =
   | Indirect | AbsoluteX | AbsoluteY -> word_to_byte_string (load_word cpu (cpu.pc + 1))
   | ZeroPage -> sprintf "%02X" (Option.value_exn i.target)
   | Accumulator | Implicit -> ""
+
+let trace (cpu : cpu) instruction opcode =
+  let cy = cpu.cycles * 3 mod 341 in
+  let args = args_to_hex_string cpu instruction in
+  let status = sprintf "A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%3d" cpu.a cpu.x cpu.y (flags_to_int cpu) cpu.s cy in
+  let str_op = Instructions.show_instruction instruction.op in
+  let instr = sprintf "%s %s" str_op (args_to_string cpu instruction) in
+  (* let instr = str_op in *)
+  sprintf "%04X  %02X %-6s%-32s %s" cpu.pc opcode args instr status
 
 let decode opcode =
   match opcode with
@@ -599,15 +608,49 @@ let execute_instruction cpu instruction =
   | TXS -> txs cpu
   | TYA -> tya cpu
 
-let step cpu ~trace_fun =
+let breakpoints = ref (Int.Set.of_list [])
+let break_on_step = ref false
+
+let rec prompt cpu =
+  print_string "(DEBUG) ";
+  Out_channel.(flush stdout);
+  let command = In_channel.(input_line_exn stdin) in
+  match (String.split command ~on:' ') with
+  | ["s"] | ["step"] -> break_on_step := true
+  | ["c"] | ["continue"] -> break_on_step := false
+  | ["q"] | ["quit"] | ["exit"] -> exit 1;
+  | "bp" :: "del" :: bp :: _ ->
+    breakpoints := Set.remove !breakpoints (Int.of_string bp);
+    prompt cpu
+  | "bp" :: "add" :: bp :: _ ->
+    breakpoints := Set.add !breakpoints (Int.of_string bp);
+    prompt cpu
+  | "bp" :: _ ->
+    !breakpoints |> Set.to_list |> List.map ~f:(sprintf "%04X") |> String.concat ~sep:", " |> print_endline;
+    prompt cpu
+  | "byte" :: addr :: _ ->
+    printf "%02X\n" (load_byte cpu (Int.of_string addr));
+    prompt cpu
+  | "word" :: addr :: _ ->
+    printf "%04X\n" (load_word cpu (Int.of_string addr));
+    prompt cpu
+  | _ -> ()
+
+let on_step cpu instruction opcode =
+  if (!break_on_step || Set.mem !breakpoints cpu.pc) then (
+    print_endline @@ trace cpu instruction opcode;
+    prompt cpu;
+  ) else ()
+
+let step ?(trace_fun = trace) cpu =
   let opcode = load_byte cpu cpu.pc in
   let instruction = decode_instruction cpu opcode in
-  trace_fun cpu instruction opcode;
-  (* if should_change_pc instruction.op then cpu.pc <- cpu.pc + instruction.size; *)
+  let _ = trace_fun cpu instruction opcode in
   cpu.pc <- cpu.pc + instruction.size;
   execute_instruction cpu instruction;
   cpu.cycles <- cpu.cycles + instruction.cycles + cpu.extra_cycles;
-  cpu.extra_cycles <- 0
+  cpu.extra_cycles <- 0;
+  on_step cpu instruction opcode
 
 let nmi cpu =
   push_word cpu cpu.pc;
