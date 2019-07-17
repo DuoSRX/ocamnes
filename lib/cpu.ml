@@ -116,14 +116,10 @@ let do_read = function
   | STA | STX | STY -> false
   | _ -> true
 
-(* let decode_addressing_mode cpu am extra_page_cycles ~read = *)
 let decode_addressing_mode cpu am extra_page_cycles =
   let pc = cpu.pc + 1 in
   match am with
   | Immediate ->
-    (* let byte = if read then load_byte cpu pc else 0x1337 in
-    (byte, Some pc, 1) *)
-    (* let byte = if read then load_byte cpu pc else 0x1337 in *)
     (lazy (load_byte cpu pc), Some pc, 1)
   | Absolute ->
     let address = load_word cpu pc in
@@ -174,7 +170,6 @@ let decode_addressing_mode cpu am extra_page_cycles =
     (lazy (cpu.a), None, 0)
   | Implicit ->
     (lazy 0, None, 0)
-  (* | _ -> failwith @@ sprintf "unimplemented addressing mode %s" (AddressingMode.show am) *)
 
 type instr = {
   op : Instructions.instruction;
@@ -324,7 +319,6 @@ let rti cpu =
   cpu.pc <- pop_word cpu
 
 let op_is_branch = function
-  (* | STA | STX | STY -> false *)
   | JMP | JSR -> false
   | BCC | BCS | BEQ | BNE | BPL -> false
   | _ -> true
