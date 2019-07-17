@@ -15,14 +15,9 @@ let rec n_times f n =
   )
 
 let trace (cpu : cpu) instruction opcode =
-  let cy = cpu.cycles * 3 mod 341 in
-  let args = args_to_hex_string cpu instruction in
-  let status = sprintf "A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%3d" cpu.a cpu.x cpu.y (flags_to_int cpu) cpu.s cy in
-  let str_op = Instructions.show_instruction instruction.op in
-  let instr = sprintf "%s %s" str_op (args_to_string cpu instruction) in
-  (* let instr = str_op in *)
-  let log = sprintf "%04X  %02X %-6s%-32s %s" cpu.pc opcode args instr status in
-  logs.(!steps % log_length) <- log
+  let log = Cpu.trace cpu instruction opcode in
+  logs.(!steps % log_length) <- log;
+  log
 
 let main () =
   let memory = Array.create ~len:0x10000 0 in
@@ -40,11 +35,6 @@ let main () =
   while !steps < run_length && not !term do
     let cycles = cpu.cycles in
     step cpu ~trace_fun:trace;
-    (* try step cpu ~trace_fun:trace
-    with Failure f -> (
-      print_endline f;
-      Array.iter logs ~f:print_endline;
-    ); *)
 
     let elapsed = cpu.cycles - cycles in
     n_times (fun () -> Ppu.step cpu.ppu) (elapsed * 3);
