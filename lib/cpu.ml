@@ -32,17 +32,19 @@ type cpu = {
   mutable zero : bool;
   mutable carry : bool;
 
+  mutable cycles : int;
   mutable extra_cycles: int;
 
   memory : int array;
-  rom : Cartridge.rom
+  rom : Cartridge.rom;
+  ppu : Ppu.ppu;
 }
 
 let load_byte cpu address =
   if address < 0x2000 then
     cpu.memory.(address land 0x7FF)
   else if (address lsr 13) = 1 then
-    0 (* TODO: PPU READ *)
+    Ppu.read_register cpu.ppu address
   else
     cpu.rom.prg.(address land 0x3FFF)
 
@@ -50,7 +52,7 @@ let store_byte cpu address value =
   if address < 0x2000 then
     cpu.memory.(address land 0x7FF) <- value
   else if (address lsr 13) = 1 then
-    () (* TODO: PPU WRITE *)
+    Ppu.write_register cpu.ppu address value
   else
     cpu.rom.prg.(address land 0x3FFF) <- value
 
@@ -591,3 +593,12 @@ let execute_instruction cpu instruction =
   | TXA -> txa cpu
   | TXS -> txs cpu
   | TYA -> tya cpu
+
+let step cpu ~trace_fun =
+  let opcode = load_byte cpu cpu.pc in
+  let instruction = decode_instruction cpu opcode in
+  trace_fun cpu instruction opcode;
+  execute_instruction cpu instruction;
+  if should_change_pc instruction.op then cpu.pc <- cpu.pc + instruction.size;
+  cpu.cycles <- cpu.cycles + instruction.cycles + cpu.extra_cycles;
+  cpu.extra_cycles <- 0
