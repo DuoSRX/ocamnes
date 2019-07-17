@@ -21,7 +21,7 @@ let trace (cpu : cpu) instruction opcode =
 
 let main () =
   let memory = Array.create ~len:0x10000 0 in
-  let rom = load_rom "./donkey.nes" in
+  let rom = load_rom "./roms/donkey.nes" in
 
   let cpu = {
     rom = rom; ppu = Ppu.make ~rom; cycles = 0;
