@@ -35,7 +35,9 @@ let main () =
     step cpu ~trace_fun:trace;
 
     let log = logs.(!steps % 10) in
+    (* print_endline log; *)
     let nestest_log = nestest.(!steps) in
+    (* print_endline nestest_log; *)
     if not (String.equal log nestest_log) then (
       print_endline "";
       print_endline nestest_log;

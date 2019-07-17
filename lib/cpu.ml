@@ -149,7 +149,6 @@ let decode_addressing_mode cpu am extra_page_cycles =
       if byte < 0x80 then cpu.pc + byte else cpu.pc + byte - 0x100
     ) in
     (offset, Some pc, 1)
-    (* (load_byte cpu pc, Some pc, 1) *)
   | IndirectX ->
     let zero_page = wrapping_add (load_byte cpu pc) cpu.x in
     let address = load_word_zero_page cpu zero_page in
@@ -230,8 +229,7 @@ let branch cpu addr cond =
   if cond then
     let cycles = if page_crossed addr (cpu.pc + 2) then 2 else 1 in
     cpu.extra_cycles <- cpu.extra_cycles + cycles;
-    cpu.pc <- addr
-
+    cpu.pc <- addr + 2
 
 let bcs cpu offset = branch cpu offset cpu.carry
 let bcc cpu offset = branch cpu offset (not cpu.carry)
@@ -309,7 +307,7 @@ let adc cpu args =
 let sbc cpu args = adc cpu (args lxor 0xFF)
 
 let jsr cpu address =
-  push_word cpu (wrapping_add_w cpu.pc 2);
+  push_word cpu (wrapping_sub_w cpu.pc 1);
   cpu.pc <- address
 
 let rts cpu = cpu.pc <- (pop_word cpu) + 1
@@ -605,8 +603,9 @@ let step cpu ~trace_fun =
   let opcode = load_byte cpu cpu.pc in
   let instruction = decode_instruction cpu opcode in
   trace_fun cpu instruction opcode;
+  (* if should_change_pc instruction.op then cpu.pc <- cpu.pc + instruction.size; *)
+  cpu.pc <- cpu.pc + instruction.size;
   execute_instruction cpu instruction;
-  if should_change_pc instruction.op then cpu.pc <- cpu.pc + instruction.size;
   cpu.cycles <- cpu.cycles + instruction.cycles + cpu.extra_cycles;
   cpu.extra_cycles <- 0
 
