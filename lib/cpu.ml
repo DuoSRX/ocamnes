@@ -25,12 +25,12 @@ type cpu = {
   mutable pc : int;
   mutable s : int;
 
-  mutable negative : bool;
-  mutable overflow : bool;
-  mutable decimal : bool;
-  mutable interrupt : bool;
-  mutable zero : bool;
   mutable carry : bool;
+  mutable zero : bool;
+  mutable interrupt : bool;
+  mutable decimal : bool;
+  mutable overflow : bool;
+  mutable negative : bool;
 
   mutable cycles : int;
   mutable extra_cycles: int;
@@ -38,13 +38,14 @@ type cpu = {
   memory : int array;
   rom : Cartridge.rom;
   ppu : Ppu.ppu;
+  mutable nestest : bool;
 }
 
 let load_byte cpu address =
   if address < 0x2000 then
     cpu.memory.(address land 0x7FF)
   else if (address lsr 13) = 1 then
-    Ppu.read_register cpu.ppu address
+    Ppu.read_register cpu.ppu (0x2000 + address % 8)
   else
     cpu.rom.prg.(address land 0x3FFF)
 
@@ -111,58 +112,68 @@ end
 
 open AddressingMode
 
+let do_read = function
+  | STA | STX | STY -> false
+  | _ -> true
+
+(* let decode_addressing_mode cpu am extra_page_cycles ~read = *)
 let decode_addressing_mode cpu am extra_page_cycles =
   let pc = cpu.pc + 1 in
   match am with
   | Immediate ->
-    (load_byte cpu pc, Some pc, 1)
+    (* let byte = if read then load_byte cpu pc else 0x1337 in
+    (byte, Some pc, 1) *)
+    (* let byte = if read then load_byte cpu pc else 0x1337 in *)
+    (lazy (load_byte cpu pc), Some pc, 1)
   | Absolute ->
     let address = load_word cpu pc in
-    (load_byte cpu address, Some address, 2)
+    (lazy (load_byte cpu address), Some address, 2)
   | AbsoluteX ->
     let arg = load_word cpu pc in
     let address = wrapping_add_w arg cpu.x in
     if page_crossed arg address then cpu.extra_cycles <- cpu.extra_cycles + extra_page_cycles;
-    (load_byte cpu address, Some address, 2)
+    (lazy (load_byte cpu address), Some address, 2)
   | AbsoluteY ->
     let arg = load_word cpu pc in
     let address = wrapping_add_w arg cpu.y in
     if page_crossed arg address then cpu.extra_cycles <- cpu.extra_cycles + extra_page_cycles;
-    (load_byte cpu address, Some address, 2)
+    (lazy (load_byte cpu address), Some address, 2)
   | ZeroPage ->
     let address = load_byte cpu pc in
-    (load_byte cpu address, Some address, 1)
+    (lazy (load_byte cpu address), Some address, 1)
   | ZeroPageX ->
     let address = wrapping_add (load_byte cpu pc) cpu.x in
-    (load_byte cpu address, Some address, 1)
+    (lazy (load_byte cpu address), Some address, 1)
   | ZeroPageY ->
     let address = wrapping_add (load_byte cpu pc) cpu.y in
-    (load_byte cpu address, Some address, 1)
+    (lazy (load_byte cpu address), Some address, 1)
   | Relative ->
-    let byte = load_byte cpu pc in
-    let offset = if byte < 0x80 then cpu.pc + byte else cpu.pc + byte - 0x100 in
+    let offset = lazy (
+      let byte = load_byte cpu pc in
+      if byte < 0x80 then cpu.pc + byte else cpu.pc + byte - 0x100
+    ) in
     (offset, Some pc, 1)
     (* (load_byte cpu pc, Some pc, 1) *)
   | IndirectX ->
     let zero_page = wrapping_add (load_byte cpu pc) cpu.x in
     let address = load_word_zero_page cpu zero_page in
-    (load_byte cpu address, Some(address), 1)
+    (lazy (load_byte cpu address), Some(address), 1)
   | IndirectY ->
     let zero_page = load_byte cpu pc in
     let word = load_word_zero_page cpu zero_page in
     let address = wrapping_add_w word cpu.y in
     if page_crossed word address then cpu.extra_cycles <- cpu.extra_cycles + extra_page_cycles;
-    (load_byte cpu address, Some(address), 1)
+    (lazy (load_byte cpu address), Some(address), 1)
   | Indirect ->
     let address = load_word cpu pc in
     let lo = load_byte cpu address in
     let hi = (address land 0xFF00) lor ((address + 1) land 0xFF) in
     let dest = lo lor ((load_byte cpu hi) lsl 8) in
-    (load_word cpu dest, Some(dest), 2)
+    (lazy (load_word cpu dest), Some(dest), 2)
   | Accumulator ->
-    (cpu.a, None, 0)
+    (lazy (cpu.a), None, 0)
   | Implicit ->
-    (0, None, 0)
+    (lazy 0, None, 0)
   (* | _ -> failwith @@ sprintf "unimplemented addressing mode %s" (AddressingMode.show am) *)
 
 type instr = {
@@ -272,9 +283,9 @@ let asl_op cpu args target =
   write_target cpu target result
 
 let ror cpu args target =
-  let carry = if cpu.carry then 0x80 else 0 in
-  let result = (args lsr 1) lor carry in
+  let carry = if cpu.carry then 1 else 0 in
   cpu.carry <- args lor 1 > 0;
+  let result = (args lsr 1) lor (carry lsl 7) in
   write_target cpu target (set_nz_flags cpu result)
 
 let rol cpu args target =
@@ -531,7 +542,9 @@ let decode opcode =
 
 let decode_instruction cpu instruction =
   let (op, mode, cycles, extra_page_cycles) = decode instruction in
-  let (args, target, size) = decode_addressing_mode cpu mode extra_page_cycles in
+  let (laz_args, target, size) = decode_addressing_mode cpu mode extra_page_cycles in
+  let args = if do_read op || cpu.nestest then Lazy.force laz_args else 0x1337 in
+
   { op; mode; cycles; args; target; size = size + 1 }
 
 let execute_instruction cpu instruction =
@@ -602,3 +615,8 @@ let step cpu ~trace_fun =
   if should_change_pc instruction.op then cpu.pc <- cpu.pc + instruction.size;
   cpu.cycles <- cpu.cycles + instruction.cycles + cpu.extra_cycles;
   cpu.extra_cycles <- 0
+
+let nmi cpu =
+  push_word cpu cpu.pc;
+  php cpu;
+  cpu.pc <- load_word cpu 0xFFFA

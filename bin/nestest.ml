@@ -22,9 +22,10 @@ let main () =
   let memory = Array.create ~len:0x10000 0 in
   let rom = load_rom "./nestest.nes" in
   let cpu = {
-    rom = rom; ppu = Ppu.make (); cycles = 0;
+    rom = rom; ppu = Ppu.make ~rom; cycles = 0;
     a = 0; x = 0; y = 0; memory; s = 0xFD; pc = 0; extra_cycles = 0;
-    zero = false; negative = false; carry = false; decimal = false; interrupt = true; overflow = false
+    zero = false; negative = false; carry = false; decimal = false; interrupt = true; overflow = false;
+    nestest = true;
   } in
   cpu.pc <- 0xC000;
 
