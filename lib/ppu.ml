@@ -172,9 +172,9 @@ let get_background_pixel ppu x =
   all_palettes.(palette land 0x3F)
 
 let set_pixel ppu x y color =
-  ppu.frame_content.{(y * 256 + x) * 3 + 0} <- color lsr 24;
-  ppu.frame_content.{(y * 256 + x) * 3 + 1} <- color lsr 16;
-  ppu.frame_content.{(y * 256 + x) * 3 + 2} <- color lsr 8
+  ppu.frame_content.{(y * 256 + x) * 3 + 0} <- color;
+  ppu.frame_content.{(y * 256 + x) * 3 + 1} <- color lsr 8;
+  ppu.frame_content.{(y * 256 + x) * 3 + 2} <- color lsr 16
 
 let step ppu =
   ppu.nmi <- false;
