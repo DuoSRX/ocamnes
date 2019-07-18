@@ -316,14 +316,15 @@ let rti cpu =
   plp cpu;
   cpu.pc <- pop_word cpu
 
+let nmi cpu =
+  push_word cpu cpu.pc;
+  php cpu;
+  cpu.pc <- load_word cpu 0xFFFA
+
 let op_is_branch = function
   | JMP | JSR -> false
   | BCC | BCS | BEQ | BNE | BPL -> false
   | _ -> true
-
-(* let should_change_pc = function
-  | JMP | JSR | RTS | RTI -> false
-  | _ -> true *)
 
 let args_to_string cpu i =
   match i.mode with
@@ -608,38 +609,48 @@ let execute_instruction cpu instruction =
   | TXS -> txs cpu
   | TYA -> tya cpu
 
-let breakpoints = ref (Int.Set.of_list [])
-let break_on_step = ref false
+module Debugger = struct
+  let breakpoints = ref (Int.Set.of_list [0xDEAD])
+  let break_on_step = ref false
 
-let rec prompt cpu =
-  print_string "(DEBUG) ";
-  Out_channel.(flush stdout);
-  let command = In_channel.(input_line_exn stdin) in
-  match (String.split command ~on:' ') with
-  | ["s"] | ["step"] -> break_on_step := true
-  | ["c"] | ["continue"] -> break_on_step := false
-  | ["q"] | ["quit"] | ["exit"] -> exit 1;
-  | "bp" :: "del" :: bp :: _ ->
-    breakpoints := Set.remove !breakpoints (Int.of_string bp);
-    prompt cpu
-  | "bp" :: "add" :: bp :: _ ->
-    breakpoints := Set.add !breakpoints (Int.of_string bp);
-    prompt cpu
-  | "bp" :: _ ->
-    !breakpoints |> Set.to_list |> List.map ~f:(sprintf "%04X") |> String.concat ~sep:", " |> print_endline;
-    prompt cpu
-  | "byte" :: addr :: _ ->
-    printf "%02X\n" (load_byte cpu (Int.of_string addr));
-    prompt cpu
-  | "word" :: addr :: _ ->
-    printf "%04X\n" (load_word cpu (Int.of_string addr));
-    prompt cpu
-  | _ -> ()
+  let rec prompt cpu =
+    print_string "(DEBUG) ";
+    Out_channel.(flush stdout);
+    let command = In_channel.(input_line_exn stdin) in
+    match (String.split command ~on:' ') with
+    | ["s"] | ["step"] -> break_on_step := true
+    | ["c"] | ["continue"] -> break_on_step := false
+    | ["q"] | ["quit"] | ["exit"] -> exit 1;
+    | "bp" :: "del" :: bp :: _ ->
+      breakpoints := Set.remove !breakpoints (Int.of_string bp);
+      prompt cpu
+    | "bp" :: "add" :: bp :: _ ->
+      breakpoints := Set.add !breakpoints (Int.of_string bp);
+      prompt cpu
+    | "bp" :: [] ->
+      !breakpoints |> Set.to_list |> List.map ~f:(sprintf "%04X") |> String.concat ~sep:", " |> print_endline;
+      prompt cpu
+    | "byte" :: addr :: [] ->
+      printf "%02X\n" (load_byte cpu (Int.of_string addr));
+      prompt cpu
+    | "byte" :: a :: b :: [] ->
+      Interval.Int.create (Int.of_string a) (Int.of_string b)
+      |> Interval.Int.to_list
+      |> List.map ~f:(fun addr -> load_byte cpu addr)
+      |> List.iter ~f:(fun s -> printf "%02X " s);
+
+      print_endline "";
+      prompt cpu
+    | "word" :: addr :: _ ->
+      printf "%04X\n" (load_word cpu (Int.of_string addr));
+      prompt cpu
+    | _ -> ()
+end
 
 let on_step cpu instruction opcode =
-  if (!break_on_step || Set.mem !breakpoints cpu.pc) then (
+  if (!Debugger.break_on_step || Set.mem !Debugger.breakpoints cpu.pc) then (
     print_endline @@ trace cpu instruction opcode;
-    prompt cpu;
+    Debugger.prompt cpu;
   ) else ()
 
 let step ?(trace_fun = trace) cpu =
@@ -651,8 +662,3 @@ let step ?(trace_fun = trace) cpu =
   cpu.cycles <- cpu.cycles + instruction.cycles + cpu.extra_cycles;
   cpu.extra_cycles <- 0;
   on_step cpu instruction opcode
-
-let nmi cpu =
-  push_word cpu cpu.pc;
-  php cpu;
-  cpu.pc <- load_word cpu 0xFFFA
