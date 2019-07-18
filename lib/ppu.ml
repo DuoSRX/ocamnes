@@ -31,10 +31,6 @@ module Registers = struct
   }
 end
 
-type ppu_result = {
-  new_frame : bool
-}
-
 type ppu = {
   mutable cycle : int;
   mutable scanline : int;
@@ -44,7 +40,6 @@ type ppu = {
   mutable vblank : bool;
   mutable nmi : bool;
   mutable new_frame : bool;
-  (* frame_content : int array; *)
   frame_content : (int, Bigarray.int8_unsigned_elt, Bigarray.c_layout) Bigarray.Array1.t;
   registers: Registers.registers;
   palettes : int array;
@@ -58,7 +53,6 @@ let make ~rom = {
   cycle = 0; scanline = 0; frames = 0; vram_rw_high = true;
   registers = Registers.make ();
   register = 0; vblank = true; nmi = false; new_frame = false;
-  (* frame_content = Array.create ~len:(256 * 240 * 3) 0xFF00FF; *)
   frame_content = Bigarray.Array1.create Bigarray.int8_unsigned Bigarray.c_layout (256 * 240 * 3);
   palettes = Array.create ~len:32 0;
   vram = Array.create ~len:0x4000 0;
@@ -99,11 +93,9 @@ let read_register ppu = function
     ppu.registers.status <- ppu.registers.status lxor 0x80;
     ppu.vram_rw_high <- true;
     let result = ppu.register land 0x1F lor (if ppu.vblank then 0x80 else 0) in
-    (* ppu.vblank <- false; *)
     result
   | 0x2004 -> ppu.oam.(ppu.registers.oam)
   | 0x2005 -> ppu.registers.scroll
-  (* | 0x2006 -> ppu.registers.address *)
   | 0x2007 ->
     let address = ppu.registers.address in
     ppu.registers.address <- ppu.registers.address + address_increment ppu;
@@ -149,10 +141,7 @@ let get_background_pixel ppu x =
   let tile_address = 0x2000 + 32 * y_offset + x_offset in
   let tile = load ppu tile_address in
   let offset = (((tile lsl 4) + y2) land 0xFFFF) + 0x1000 in
-  (* let offset = (((tile lsl 4) + y2) land 0xFFFF) in *)
   let pixel = get_pixel ppu x2 offset in
-  (* let c = (pixel lsl 6) land 0xFFFFFFFF in *)
-  (* (c lsl 8) lor (c lsl 16) lor (c lsl 24) *)
 
   let block = y_offset / 4 * 8 + x_offset / 4 in
   let attributes = load ppu (0x23C0 + block) in
@@ -176,7 +165,50 @@ let set_pixel ppu x y color =
   ppu.frame_content.{(y * 256 + x) * 3 + 1} <- color lsr 8;
   ppu.frame_content.{(y * 256 + x) * 3 + 2} <- color lsr 16
 
-let step ppu =
+let start_vblank ppu =
+  if (ppu.registers.control land 0x80) > 0 then
+    ppu.nmi <- true;
+  ppu.vblank <- true;
+  ppu.registers.status <- ppu.registers.status lor 0x80
+
+let end_vblank ppu =
+  ppu.vblank <- false;
+  ppu.registers.status <- ppu.registers.status land (lnot 0x80)
+
+let step ppu cpu_cycle =
+  ppu.nmi <- false;
+  ppu.new_frame <- false;
+
+  let rec loop () =
+    let next_scanline = 114 + ppu.cycle in
+    if next_scanline > cpu_cycle then
+      ()
+      (* printf "SC:%d CY:%d\n" next_scanline cpu_cycle *)
+    else (
+      if ppu.scanline < 240 then (
+        for x = 0 to 255 do
+          let colour = get_background_pixel ppu x in
+          set_pixel ppu x ppu.scanline colour
+        done;
+      );
+      ppu.scanline <- ppu.scanline + 1;
+      match ppu.scanline with
+      | 241 ->
+        start_vblank ppu
+      | 261 ->
+        ppu.scanline <- 0;
+        ppu.frames <- ppu.frames + 1;
+        ppu.new_frame <- true;
+        end_vblank ppu
+      | _ -> ();
+
+      ppu.cycle <- ppu.cycle + 114;
+      loop ()
+    );
+  in loop ();
+  (* ppu.cycle <- 0 *)
+
+(* let step ppu =
   ppu.nmi <- false;
 
   let scanline = ppu.scanline in
@@ -185,6 +217,7 @@ let step ppu =
       let colour = get_background_pixel ppu x in
       set_pixel ppu x scanline colour
     done;
+    (* ppu.scanline <- ppu.scanline + 1 *)
   );
 
   if scanline = 241 && ppu.cycle = 1 then (
@@ -195,14 +228,14 @@ let step ppu =
 
   ppu.cycle <- ppu.cycle + 1;
 
-  if ppu.cycle >= 341 then (
+  if ppu.cycle >= 340 then (
     ppu.cycle <- 0;
     ppu.scanline <- ppu.scanline + 1
   );
 
-  if ppu.scanline >= 262 then (
+  if ppu.scanline >= 261 && ppu.cycle = 339 then (
     ppu.scanline <- 0;
     ppu.frames <- ppu.frames + 1;
     ppu.new_frame <- true;
     ppu.vblank <- false;
-  );
+  ); *)

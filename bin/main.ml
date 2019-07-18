@@ -28,16 +28,19 @@ let cpu = {
 let event_loop window renderer texture =
   let e = Sdl.Event.create () in
   let rec loop () =
-    let cycles = cpu.cycles in
+    (* let cycles = cpu.cycles in *)
     (* logs.(cpu.steps % log_length) <- step cpu; *)
     ignore (step cpu);
-    let elapsed = cpu.cycles - cycles in
-    n_times (fun () -> Ppu.step cpu.ppu) (elapsed * 3);
+    (* let elapsed = cpu.cycles - cycles in *)
+    (* n_times (fun () -> Ppu.step cpu.ppu) (elapsed * 3); *)
+    Ppu.step cpu.ppu cpu.cycles;
     if cpu.ppu.nmi then Cpu.nmi cpu;
+    if cpu.steps % 10000 = 0 then
+      ignore @@ Sdl.set_window_title window (sprintf "steps:%d cycles:%d frames:%d" cpu.steps cpu.cycles cpu.ppu.frames);
 
     if cpu.ppu.new_frame then (
       cpu.ppu.new_frame <- false;
-      ignore @@ Sdl.set_window_title window (sprintf "%d" cpu.steps);
+      (* ignore @@ Sdl.set_window_title window (sprintf "%d" cpu.steps); *)
       let _ = Sdl.update_texture texture None cpu.ppu.frame_content (256 * 3) in
       let _ = Sdl.render_clear renderer in
       let _ = Sdl.render_copy renderer texture in
