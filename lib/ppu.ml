@@ -26,6 +26,7 @@ type ppu = {
   registers: Registers.registers;
   vram: int array;
   oam: int array;
+  nametables : int array;
   rom : Cartridge.rom;
 }
 
@@ -35,20 +36,29 @@ let make ~rom = {
   register = 0; vblank = true; nmi = false;
   vram = Array.create ~len:0x4000 0;
   oam = Array.create ~len:0x100 0;
+  nametables = Array.create ~len:0x800 0;
   rom;
 }
 
 let load ppu address =
-  if address < 0x2000 then print_endline "prout";
-
   if address < 0x2000 then
     ppu.rom.chr.(address) (* CHR *)
   else if address < 0x3F00 then
-    0xDEA1 (* Name Tables *)
+    ppu.nametables.(address land 0x07FF)
   else if address < 0x4000 then
     0xDEA2 (* Palettes *)
   else
     failwith @@ sprintf "Trying to read PPU VRAM @ %04X" address
+
+let store ppu address value =
+  if address < 0x2000 then
+    () (* Can't write to CHR? *)
+  else if address < 0x3F00 then
+    ppu.nametables.(address land 0x07FF) <- value
+  else if address < 0x4000 then
+    ()
+  else
+    failwith @@ sprintf "Trying to write PPU VRAM @ %04X" address
 
 let address_increment ppu =
   match ppu.registers.control land 0x04 with
@@ -92,9 +102,8 @@ let write_register ppu register value =
     )
   | 0x2007 ->
     let address = ppu.registers.address in
-    ppu.vram.(address) <- value;
-    (* printf "WRITEBRAH %04X %02X\n" address value; *)
-    ppu.registers.address <- (ppu.registers.address + address_increment ppu) land 0x3FFF
+    store ppu address value;
+    ppu.registers.address <- ((ppu.registers.address + address_increment ppu) land 0xFFFF) land 0x3FFF
   | _ as r -> failwith @@ sprintf "Cannot write PPU Register @ %04X" r
 
 let step ppu =

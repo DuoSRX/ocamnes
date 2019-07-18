@@ -641,9 +641,18 @@ module Debugger = struct
     | "byte" :: a :: b :: [] ->
       Interval.Int.create (Int.of_string a) (Int.of_string b)
       |> Interval.Int.to_list
-      |> List.map ~f:(fun addr -> load_byte cpu addr)
-      |> List.iter ~f:(fun s -> printf "%02X " s);
-
+      |> List.map ~f:(load_byte cpu)
+      |> List.iter ~f:(printf "%02X ");
+      print_endline "";
+      prompt cpu
+    | "ppu" :: addr :: [] ->
+      printf "%02X\n" (Ppu.load cpu.ppu (Int.of_string addr));
+      prompt cpu
+    | "ppu" :: a :: b :: [] ->
+      Interval.Int.create (Int.of_string a) (Int.of_string b)
+      |> Interval.Int.to_list
+      |> List.map ~f:(Ppu.load cpu.ppu)
+      |> List.iter ~f:(printf "%02X ");
       print_endline "";
       prompt cpu
     | "word" :: addr :: _ ->
