@@ -62,16 +62,14 @@ let read_register ppu = function
     ppu.registers.status <- ppu.registers.status lxor 0x80;
     ppu.vram_rw_high <- true;
     let result = ppu.register land 0x1F lor (if ppu.vblank then 0x80 else 0) in
-    ppu.vblank <- false;
+    (* ppu.vblank <- false; *)
     result
   | 0x2004 -> ppu.oam.(ppu.registers.oam)
   | 0x2005 -> ppu.registers.scroll
-  | 0x2006 -> ppu.registers.address
+  (* | 0x2006 -> ppu.registers.address *)
   | 0x2007 ->
     let address = ppu.registers.address in
-    (* printf "SUPBRAH %04X %02X\n" address (load ppu address); *)
     ppu.registers.address <- ppu.registers.address + address_increment ppu;
-    (* ppu.vram.(address) *)
     load ppu address
   | _ as r -> failwith @@ sprintf "Cannot read PPU Register @ %04X" r
 
@@ -81,16 +79,15 @@ let write_register ppu register value =
   | 0x2000 -> ppu.registers.control <- value
   | 0x2001 -> ppu.registers.mask <- value
   | 0x2003 -> ppu.registers.oam <- value
-  | 0x2005 -> ppu.registers.scroll <- value
+  | 0x2005 ->
+    ppu.vram_rw_high <- not ppu.vram_rw_high;
+    ppu.registers.scroll <- value (* TODO: write to scroll horizontal or vertical *)
   | 0x2006 ->
-    (* printf "SUPBRAH %04X %02X\n" address (load ppu address); *)
     if ppu.vram_rw_high then (
       ppu.registers.address <- ((ppu.registers.address land 0xFF) lor (value lsl 8) land 0x3FFF);
-      (* printf "SUPBRAH hi %04X\n" ppu.registers.address; *)
       ppu.vram_rw_high <- false
     ) else (
       ppu.registers.address <- (ppu.registers.address land 0xFF00) lor value;
-      (* printf "SUPBRAH lo %04X\n" ppu.registers.address; *)
       ppu.vram_rw_high <- true
     )
   | 0x2007 ->
