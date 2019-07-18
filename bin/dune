@@ -1,7 +1,7 @@
 (executable
  (name      main)
  (modules main)
- (libraries core nes)
+ (libraries core nes tsdl)
  (preprocess
   (pps ppx_deriving.std)))
 
