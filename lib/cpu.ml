@@ -34,6 +34,7 @@ type cpu = {
 
   mutable cycles : int;
   mutable extra_cycles: int;
+  mutable steps : int;
 
   memory : int array;
   rom : Cartridge.rom;
@@ -610,17 +611,21 @@ let execute_instruction cpu instruction =
   | TYA -> tya cpu
 
 module Debugger = struct
-  let breakpoints = ref (Int.Set.of_list [0xDEAD])
+  (* let breakpoints = ref (Int.Set.of_list [0xEC6D]) *)
+  let breakpoints = ref (Int.Set.of_list [])
   let break_on_step = ref false
+  let break_after = ref 1000000
 
   let rec prompt cpu =
     print_string "(DEBUG) ";
     Out_channel.(flush stdout);
     let command = In_channel.(input_line_exn stdin) in
     match (String.split command ~on:' ') with
+    | [""] -> prompt cpu
     | ["s"] | ["step"] -> break_on_step := true
     | ["c"] | ["continue"] -> break_on_step := false
     | ["q"] | ["quit"] | ["exit"] -> exit 1;
+    | ["steps"] -> printf "%d\n" cpu.steps; prompt cpu
     | "bp" :: "del" :: bp :: _ ->
       breakpoints := Set.remove !breakpoints (Int.of_string bp);
       prompt cpu
@@ -644,11 +649,13 @@ module Debugger = struct
     | "word" :: addr :: _ ->
       printf "%04X\n" (load_word cpu (Int.of_string addr));
       prompt cpu
-    | _ -> ()
+    | _ ->
+      print_endline "Unknown command (q to quit, s to step, c to continue)";
+      prompt cpu
 end
 
 let on_step cpu instruction opcode =
-  if (!Debugger.break_on_step || Set.mem !Debugger.breakpoints cpu.pc) then (
+  if (!Debugger.break_on_step || Set.mem !Debugger.breakpoints cpu.pc || !Debugger.break_after = cpu.steps) then (
     print_endline @@ trace cpu instruction opcode;
     Debugger.prompt cpu;
   ) else ()
@@ -656,9 +663,12 @@ let on_step cpu instruction opcode =
 let step ?(trace_fun = trace) cpu =
   let opcode = load_byte cpu cpu.pc in
   let instruction = decode_instruction cpu opcode in
-  let _ = trace_fun cpu instruction opcode in
+  let log = trace_fun cpu instruction opcode in
   cpu.pc <- cpu.pc + instruction.size;
   execute_instruction cpu instruction;
   cpu.cycles <- cpu.cycles + instruction.cycles + cpu.extra_cycles;
   cpu.extra_cycles <- 0;
-  on_step cpu instruction opcode
+  cpu.steps <- cpu.steps + 1;
+  on_step cpu instruction opcode;
+  (* print_endline log; *)
+  log

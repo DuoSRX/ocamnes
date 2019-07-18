@@ -4,7 +4,7 @@ open Nes.Cpu
 open Nes.Cartridge
 
 let logs = Array.create ~len:10 ""
-let steps = ref 0
+let log_length = 10
 
 let trace cpu instruction opcode =
   let str_op = Instructions.show_instruction instruction.op in
@@ -14,9 +14,7 @@ let trace cpu instruction opcode =
   let args = args_to_hex_string cpu instruction in
   let cy = cpu.cycles * 3 mod 341 in
   let status = sprintf "A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%3d" cpu.a cpu.x cpu.y (flags_to_int cpu) cpu.s cy in
-  let log = sprintf "%04X  %02X %-6s%-32s %s" cpu.pc opcode args instr2 status in
-  logs.(!steps % 10) <- log;
-  log
+  sprintf "%04X  %02X %-6s%-32s %s" cpu.pc opcode args instr2 status
 
 let main () =
   let nestest = In_channel.read_lines "./roms/nestest.log" |> Array.of_list in
@@ -26,29 +24,26 @@ let main () =
     rom = rom; ppu = Ppu.make ~rom; cycles = 0;
     a = 0; x = 0; y = 0; memory; s = 0xFD; pc = 0; extra_cycles = 0;
     zero = false; negative = false; carry = false; decimal = false; interrupt = true; overflow = false;
-    nestest = true;
+    nestest = true; steps = -1;
   } in
   cpu.pc <- 0xC000;
 
   let term = ref false in
 
   while not !term do
-    step cpu ~trace_fun:trace;
-
-    let log = logs.(!steps % 10) in
+    let log = step cpu ~trace_fun:trace in
+    logs.(cpu.steps % log_length) <- log;
     (* print_endline log; *)
-    let nestest_log = nestest.(!steps) in
+    let nestest_log = nestest.(cpu.steps) in
     (* print_endline nestest_log; *)
     if not (String.equal log nestest_log) then (
-      print_endline "";
+      print_endline "Discrepancy: ";
       print_endline nestest_log;
       print_endline log;
       print_endline "\nPrevious 10 log lines:";
       Array.iter logs ~f:print_endline;
-      failwith @@ sprintf "Nestest discrepancy detected @ PC = %04X, LOG = %d" cpu.pc !steps;
+      failwith @@ sprintf "Nestest discrepancy detected @ PC = %04X, LOG = %d" cpu.pc cpu.steps;
     );
-
-    steps := !steps + 1;
 
     (* Stop before testing all the illegal opcodes (except NOPs) *)
     if cpu.pc = 0xE543 then term := true
