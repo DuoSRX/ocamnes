@@ -204,9 +204,11 @@ let sprite_pixel ppu x =
 
     if in_box && on_scanline then (
       let tile = sprite.index + sprite_address ppu in
-      let sprite_x = x - sprite.x in
-      let sprite_y = ppu.scanline - sprite.y in
-      (* TODO: Flip sprites *)
+      let hflip = sprite.attributes land 0x40 > 0 in
+      let vflip = sprite.attributes land 0x80 > 0 in
+      let sprite_x = if hflip then 7 - x - sprite.x else x - sprite.x in
+      let sprite_y = if vflip then 7 - ppu.scanline - sprite.y else ppu.scanline - sprite.y in
+
       let offset = ((tile lsl 4) + sprite_y) + sprite_address ppu in
       let pixel = get_pixel ppu sprite_x (offset land 0xFFFF) in
 
