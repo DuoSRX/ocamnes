@@ -53,6 +53,8 @@ let load_byte cpu address =
   )
   else if address >= 0x4000 && address <= 0x4020 then
     0 (* TODO: controllers, APU...etc *)
+  else if address < 0x8000 then
+    cpu.rom.ram.(address land 0x1FFF)
   else if cpu.rom.headers.prg_size > 0x4000 then
     cpu.rom.prg.(address land 0x7FFF)
   else
@@ -69,6 +71,8 @@ let store_byte cpu address value =
     cpu.extra_cycles <- cpu.extra_cycles + 514)
   else if address >= 0x4000 && address <= 0x4020 then
     () (* TODO: controllers, APU...etc *)
+  else if address < 0x8000 then
+    cpu.rom.ram.(address land 0x1FFF) <- value
   else
     failwith @@ sprintf "Can't write to PRG @ %04X" address
     (* cpu.rom.prg.(address land 0x3FFF) <- value *)
