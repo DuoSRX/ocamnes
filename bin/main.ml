@@ -9,9 +9,12 @@ let log_length = 20
 let logs = Array.create ~len:log_length ""
 let term = ref false
 
-let memory = Array.create ~len:0x10000 0
-let rom = load_rom "./roms/donkey.nes"
+let memory = Array.create ~len:0x800 0
+(* let rom = load_rom "./roms/instr_test-v5/official_only.nes" *)
+(* let rom = load_rom "./roms/instr_test-v5/rom_singles/01-basics.nes" *)
+(* let rom = load_rom "./roms/instr_test-v5/rom_singles/03-immediate.nes" *)
 (* let rom = load_rom "./roms/nestest.nes" *)
+let rom = load_rom "./roms/donkey.nes"
 
 let cpu = {
   rom = rom; ppu = Ppu.make ~rom; cycles = 0;
@@ -19,6 +22,17 @@ let cpu = {
   zero = false; negative = false; carry = false; decimal = false; interrupt = true; overflow = false;
   nestest = false; steps = -1;
 }
+
+let update_input keycode ~down = match keycode with
+| `Z -> Input.controller_state.a <- down
+| `X -> Input.controller_state.b <- down
+| `Return -> Input.controller_state.start <- down
+| `Lshift -> Input.controller_state.select <- down
+| `Down -> Input.controller_state.down <- down
+| `Up -> Input.controller_state.up <- down
+| `Left -> Input.controller_state.left <- down
+| `Right -> Input.controller_state.right <- down
+| _ -> ()
 
 let event_loop window renderer texture =
   let e = Sdl.Event.create () in
@@ -51,14 +65,20 @@ let event_loop window renderer texture =
       let _ = Sdl.render_copy renderer texture in
       let _ = Sdl.render_present renderer in
 
+      let key_scancode e = Sdl.Scancode.enum Sdl.Event.(get e keyboard_scancode) in
       while Sdl.poll_event (Some e) do
         match Sdl.Event.(enum (get e typ)) with
-          (* | `Key_down when key_scancode e = `Space -> *)
           | `Quit -> do_quit := true
+          | `Key_down when key_scancode e = `Escape -> do_quit := true
+          | `Key_down when key_scancode e = `Space -> Cpu.Debugger.break_on_step := true
+          | `Key_down when key_scancode e = `V ->
+            Cpu.Debugger.break_on_step := true;
+            printf "%04X" cpu.ppu.oam.(31);
+          | `Key_up -> update_input ~down:false (key_scancode e)
+          | `Key_down -> update_input ~down:true (key_scancode e)
           | _ -> ()
       done;
     );
-    (* let key_scancode e = Sdl.Scancode.enum Sdl.Event.(get e keyboard_scancode) in *)
     (* Sdl.start_text_input(); *)
   done
 
