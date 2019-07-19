@@ -64,7 +64,11 @@ let event_loop ~window ~renderer ~texture =
 
       cpu.ppu.new_frame <- false;
 
-      Sdl.update_texture texture None cpu.ppu.frame_content (256 * 3) |> sdl_try;
+      (* Is this really worse than lock texture?? *)
+      (* Sdl.update_texture texture None cpu.ppu.frame_content (256 * 3) |> sdl_try; *)
+      let (pixels, _pitch) = sdl_try @@ Sdl.lock_texture texture None Bigarray.int8_unsigned in
+      Bigarray.Array1.blit cpu.ppu.frame_content pixels;
+      Sdl.unlock_texture texture;
       Sdl.render_clear renderer |> sdl_try;
       Sdl.render_copy renderer texture |> sdl_try;
       Sdl.render_present renderer;
