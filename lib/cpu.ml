@@ -40,6 +40,7 @@ type cpu = {
   rom : Cartridge.rom;
   ppu : Ppu.ppu;
   mutable nestest : bool;
+  mutable tracing : bool;
 }
 
 let load_byte cpu address =
@@ -688,16 +689,14 @@ let on_step cpu instruction opcode =
     Debugger.prompt cpu;
   ) else ()
 
-(* let step ?(trace_fun = trace) cpu = *)
-let step cpu =
+let step ?(trace_fun = trace) cpu =
   let opcode = load_byte cpu cpu.pc in
   let instruction = decode_instruction cpu opcode in
-  (* let log = trace_fun cpu instruction opcode in *)
+  let log = if cpu.tracing then Some (trace_fun cpu instruction opcode) else None in
   cpu.pc <- cpu.pc + instruction.size;
   execute_instruction cpu instruction;
   cpu.cycles <- cpu.cycles + instruction.cycles + cpu.extra_cycles;
   cpu.extra_cycles <- 0;
   cpu.steps <- cpu.steps + 1;
   on_step cpu instruction opcode;
-  ""
-  (* log *)
+  log

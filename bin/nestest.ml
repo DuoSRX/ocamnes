@@ -24,32 +24,30 @@ let main () =
     rom = rom; ppu = Ppu.make ~rom; cycles = 0;
     a = 0; x = 0; y = 0; memory; s = 0xFD; pc = 0; extra_cycles = 0;
     zero = false; negative = false; carry = false; decimal = false; interrupt = true; overflow = false;
-    nestest = true; steps = -1;
+    nestest = true; tracing = true; steps = -1;
   } in
   cpu.pc <- 0xC000;
 
   let term = ref false in
 
   while not !term do
-    let log = step cpu ~trace_fun:trace in
+    let log = Option.value_exn (step cpu ~trace_fun:trace) in
     logs.(cpu.steps % log_length) <- log;
-    (* print_endline log; *)
+
     let nestest_log = nestest.(cpu.steps) in
-    (* print_endline nestest_log; *)
     if not (String.equal log nestest_log) then (
-      print_endline "Discrepancy: ";
-      print_endline nestest_log;
-      print_endline log;
-      print_endline "\nPrevious 10 log lines:";
+      printf "Nestest discrepancy detected @ PC = %04X, nestest.log line %d\n\n" cpu.pc cpu.steps;
+      printf "Nestest: %s\n" nestest_log;
+      printf "Ocamnes: %s\n" log;
+      print_endline "\nBacktrace:";
       Array.iter logs ~f:print_endline;
-      failwith @@ sprintf "Nestest discrepancy detected @ PC = %04X, LOG = %d" cpu.pc cpu.steps;
+      exit 1;
     );
 
     (* Stop before testing all the illegal opcodes (except NOPs) *)
     if cpu.pc = 0xE543 then term := true
   done;
 
-  (* Array.iter logs ~f:print_endline; *)
   print_endline "Nestest run successful"
 
 let () = main ()

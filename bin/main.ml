@@ -14,13 +14,15 @@ let memory = Array.create ~len:0x800 0
 (* let rom = load_rom "./roms/instr_test-v5/rom_singles/01-basics.nes" *)
 (* let rom = load_rom "./roms/instr_test-v5/rom_singles/03-immediate.nes" *)
 (* let rom = load_rom "./roms/nestest.nes" *)
+(* let rom = load_rom "./roms/color_test.nes" *)
+(* let rom = load_rom "./roms/ice_climber.nes" *)
 let rom = load_rom "./roms/donkey.nes"
 
 let cpu = {
   rom = rom; ppu = Ppu.make ~rom; cycles = 0;
   a = 0; x = 0; y = 0; memory; s = 0xFD; pc = 0; extra_cycles = 0;
   zero = false; negative = false; carry = false; decimal = false; interrupt = true; overflow = false;
-  nestest = false; steps = -1;
+  nestest = false; tracing = false; steps = -1;
 }
 
 let update_input keycode ~down = match keycode with
