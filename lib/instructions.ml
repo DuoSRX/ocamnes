@@ -14,6 +14,7 @@ type instruction =
   | BVS
   | CLC
   | CLD
+  | CLI
   | CLV
   | CPX
   | CPY

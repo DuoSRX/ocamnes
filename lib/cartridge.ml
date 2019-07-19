@@ -33,8 +33,8 @@ let load_headers rom =
 let load_rom path =
   let rom = open_file path in
   let headers = load_headers rom in
-  (* printf "Loaded rom %s\n" path; *)
-  (* printf "PRG:%04x CHR:%04x Mapper:%d\n" headers.prg_size headers.chr_size headers.mapper; *)
+  printf "Loaded rom %s\n" path;
+  printf "PRG:%04x CHR:%04x Mapper:%d\n" headers.prg_size headers.chr_size headers.mapper;
   {
     headers;
     prg = Array.slice rom 0x10 (0x10 + headers.prg_size);

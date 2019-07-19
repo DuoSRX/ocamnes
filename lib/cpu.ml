@@ -47,6 +47,13 @@ let load_byte cpu address =
     cpu.memory.(address land 0x7FF)
   else if (address lsr 13) = 1 then
     Ppu.read_register cpu.ppu (0x2000 + address % 8)
+  else if address = 0x4016 then (
+    if Input.next_key () then 1 else 0
+  )
+  else if address >= 0x4000 && address <= 0x4020 then
+    0 (* TODO: controllers, APU...etc *)
+  else if cpu.rom.headers.prg_size > 0x4000 then
+    cpu.rom.prg.(address land 0x7FFF)
   else
     cpu.rom.prg.(address land 0x3FFF)
 
@@ -58,9 +65,12 @@ let store_byte cpu address value =
   else if address = 0x4014 then (
     Array.blit ~src:cpu.memory ~src_pos:(value * 0x100)
                ~dst:cpu.ppu.oam ~dst_pos:0 ~len:255;
-    cpu.extra_cycles <- cpu.extra_cycles + 514
-  ) else
-    cpu.rom.prg.(address land 0x3FFF) <- value
+    cpu.extra_cycles <- cpu.extra_cycles + 514)
+  else if address >= 0x4000 && address <= 0x4020 then
+    () (* TODO: controllers, APU...etc *)
+  else
+    failwith @@ sprintf "Can't write to PRG @ %04X" address
+    (* cpu.rom.prg.(address land 0x3FFF) <- value *)
 
 let load_word cpu address =
   let a = load_byte cpu address in
@@ -445,6 +455,7 @@ let decode opcode =
   | 0x51 -> (EOR, IndirectY, 5, 0)
   | 0x55 -> (EOR, ZeroPageX, 4, 0)
   | 0x56 -> (LSR, ZeroPageX, 6, 0)
+  | 0x58 -> (CLI, Implicit, 2, 0)
   | 0x59 -> (EOR, AbsoluteY, 4, 0)
   | 0x5D -> (EOR, AbsoluteX, 4, 0)
   | 0x5E -> (LSR, AbsoluteX, 7, 0)
@@ -572,6 +583,7 @@ let execute_instruction cpu instruction =
   | BVC -> bvc cpu args
   | CLC -> cpu.carry <- false
   | CLD -> cpu.decimal <- false
+  | CLI -> cpu.interrupt <- false
   | CLV -> cpu.overflow <- false
   | CMP -> cmp cpu args
   | CPX -> cpx cpu args
@@ -656,6 +668,10 @@ module Debugger = struct
       |> Interval.Int.to_list
       |> List.map ~f:(Ppu.load cpu.ppu)
       |> List.iter ~f:(printf "%02X ");
+      print_endline "";
+      prompt cpu
+    | "oam" :: [] ->
+      cpu.ppu.oam |> Array.iter ~f:(printf "%02X ");
       print_endline "";
       prompt cpu
     | "word" :: addr :: _ ->

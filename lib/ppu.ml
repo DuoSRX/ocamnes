@@ -95,7 +95,7 @@ let read_register ppu = function
     ppu.registers.status
     (* let result = ppu.register land 0x1F lor (if ppu.vblank then 0x80 else 0) in
     result *)
-  | 0x2004 -> ppu.oam.(ppu.registers.oam)
+  (* | 0x2004 -> ppu.oam.(ppu.registers.oam) *)
   | 0x2005 -> ppu.registers.scroll
   | 0x2007 ->
     let address = ppu.registers.address in
@@ -109,6 +109,10 @@ let write_register ppu register value =
   | 0x2000 -> ppu.registers.control <- value
   | 0x2001 -> ppu.registers.mask <- value
   | 0x2003 -> ppu.registers.oam <- value
+  | 0x2004 ->
+    let address = ppu.registers.oam in
+    ppu.oam.(address) <- value;
+    ppu.registers.oam <- (address + 1) mod 0x100
   | 0x2005 ->
     ppu.vram_rw_high <- not ppu.vram_rw_high;
     ppu.registers.scroll <- value (* TODO: write to scroll horizontal or vertical *)
@@ -126,6 +130,11 @@ let write_register ppu register value =
     ppu.registers.address <- ((ppu.registers.address + address_increment ppu) land 0xFFFF) land 0x3FFF
   | _ as r -> failwith @@ sprintf "Cannot write PPU Register @ %04X" r
 
+let background_pattern_table_address ppu =
+  match ppu.registers.control land 0x10 with
+  | 0 -> 0
+  | _ -> 0x1000
+
 let get_pixel ppu x offset =
   let p0 = load ppu offset in
   let p1 = load ppu (offset + 8) in
@@ -141,7 +150,7 @@ let get_background_pixel ppu x =
 
   let tile_address = 0x2000 + 32 * y_offset + x_offset in
   let tile = load ppu tile_address in
-  let offset = (((tile lsl 4) + y2) land 0xFFFF) + 0x1000 in
+  let offset = (((tile lsl 4) + y2) land 0xFFFF) + background_pattern_table_address ppu in
   let pixel = get_pixel ppu x2 offset in
 
   let block = y_offset / 4 * 8 + x_offset / 4 in
@@ -206,8 +215,8 @@ let sprite_pixel ppu x =
       let tile = sprite.index + sprite_address ppu in
       let hflip = sprite.attributes land 0x40 > 0 in
       let vflip = sprite.attributes land 0x80 > 0 in
-      let sprite_x = if hflip then 7 - x - sprite.x else x - sprite.x in
-      let sprite_y = if vflip then 7 - ppu.scanline - sprite.y else ppu.scanline - sprite.y in
+      let sprite_x = if hflip then 7 - (x - sprite.x) else x - sprite.x in
+      let sprite_y = if vflip then 7 - (ppu.scanline - sprite.y) else ppu.scanline - sprite.y in
 
       let offset = ((tile lsl 4) + sprite_y) + sprite_address ppu in
       let pixel = get_pixel ppu sprite_x (offset land 0xFFFF) in
