@@ -547,7 +547,6 @@ let decode_instruction cpu instruction =
   let (op, mode, cycles, extra_page_cycles) = decode instruction in
   let (laz_args, target, size) = decode_addressing_mode cpu mode extra_page_cycles in
   let args = if do_read op || cpu.nestest then Lazy.force laz_args else 0x1337 in
-
   { op; mode; cycles; args; target; size = size + 1 }
 
 let execute_instruction cpu instruction =
@@ -669,15 +668,16 @@ let on_step cpu instruction opcode =
     Debugger.prompt cpu;
   ) else ()
 
-let step ?(trace_fun = trace) cpu =
+(* let step ?(trace_fun = trace) cpu = *)
+let step cpu =
   let opcode = load_byte cpu cpu.pc in
   let instruction = decode_instruction cpu opcode in
-  let log = trace_fun cpu instruction opcode in
+  (* let log = trace_fun cpu instruction opcode in *)
   cpu.pc <- cpu.pc + instruction.size;
   execute_instruction cpu instruction;
   cpu.cycles <- cpu.cycles + instruction.cycles + cpu.extra_cycles;
   cpu.extra_cycles <- 0;
   cpu.steps <- cpu.steps + 1;
   on_step cpu instruction opcode;
-  (* print_endline log; *)
-  log
+  ""
+  (* log *)
