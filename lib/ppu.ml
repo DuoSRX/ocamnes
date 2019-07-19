@@ -55,7 +55,7 @@ let make ~rom = {
   register = 0; vblank = true; nmi = false; new_frame = false;
   frame_content = Bigarray.Array1.create Bigarray.int8_unsigned Bigarray.c_layout (256 * 240 * 3);
   palettes = Array.create ~len:32 0;
-  vram = Array.create ~len:0x4000 0;
+  vram = Array.create ~len:0x800 0;
   oam = Array.create ~len:0x100 0;
   nametables = Array.create ~len:0x800 0;
   rom;
@@ -90,10 +90,11 @@ let read_register ppu = function
   | 0x2000 -> ppu.registers.control
   | 0x2001 -> ppu.registers.mask
   | 0x2002 ->
-    ppu.registers.status <- ppu.registers.status lxor 0x80;
+    (* ppu.registers.status <- ppu.registers.status lxor 0x80; *)
     ppu.vram_rw_high <- true;
-    let result = ppu.register land 0x1F lor (if ppu.vblank then 0x80 else 0) in
-    result
+    ppu.registers.status
+    (* let result = ppu.register land 0x1F lor (if ppu.vblank then 0x80 else 0) in
+    result *)
   | 0x2004 -> ppu.oam.(ppu.registers.oam)
   | 0x2005 -> ppu.registers.scroll
   | 0x2007 ->
@@ -161,9 +162,9 @@ let get_background_pixel ppu x =
   all_palettes.(palette land 0x3F)
 
 let set_pixel ppu x y color =
-  ppu.frame_content.{(y * 256 + x) * 3 + 0} <- color;
+  ppu.frame_content.{(y * 256 + x) * 3 + 2} <- color;
   ppu.frame_content.{(y * 256 + x) * 3 + 1} <- color lsr 8;
-  ppu.frame_content.{(y * 256 + x) * 3 + 2} <- color lsr 16
+  ppu.frame_content.{(y * 256 + x) * 3 + 0} <- color lsr 16
 
 let start_vblank ppu =
   if (ppu.registers.control land 0x80) > 0 then
@@ -181,10 +182,8 @@ let step ppu cpu_cycle =
 
   let rec loop () =
     let next_scanline = 114 + ppu.cycle in
-    if next_scanline > cpu_cycle then
-      ()
-      (* printf "SC:%d CY:%d\n" next_scanline cpu_cycle *)
-    else (
+
+    if not (next_scanline > cpu_cycle) then (
       if ppu.scanline < 240 then (
         for x = 0 to 255 do
           let colour = get_background_pixel ppu x in
@@ -206,36 +205,3 @@ let step ppu cpu_cycle =
       loop ()
     );
   in loop ();
-  (* ppu.cycle <- 0 *)
-
-(* let step ppu =
-  ppu.nmi <- false;
-
-  let scanline = ppu.scanline in
-  if scanline >= 0 && scanline < 240 then (
-    for x = 0 to 255 do
-      let colour = get_background_pixel ppu x in
-      set_pixel ppu x scanline colour
-    done;
-    (* ppu.scanline <- ppu.scanline + 1 *)
-  );
-
-  if scanline = 241 && ppu.cycle = 1 then (
-    ppu.vblank <- true;
-    if ppu.registers.control land 0xFF > 0 then
-      ppu.nmi <- true
-  );
-
-  ppu.cycle <- ppu.cycle + 1;
-
-  if ppu.cycle >= 340 then (
-    ppu.cycle <- 0;
-    ppu.scanline <- ppu.scanline + 1
-  );
-
-  if ppu.scanline >= 261 && ppu.cycle = 339 then (
-    ppu.scanline <- 0;
-    ppu.frames <- ppu.frames + 1;
-    ppu.new_frame <- true;
-    ppu.vblank <- false;
-  ); *)
