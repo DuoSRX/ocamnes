@@ -35,7 +35,7 @@ let event_loop window renderer texture =
     if cpu.ppu.new_frame then (
       let now = Unix.gettimeofday () in
       if now >= (!last_time +. 1.0) then (
-        ignore @@ Sdl.set_window_title window (sprintf "steps:%d cycles:%dk frames:%d %.1f fps" cpu.steps (!cycles /1000) cpu.ppu.frames !frames);
+        ignore @@ Sdl.set_window_title window (sprintf "%.1f FPS" !frames);
         frames := 0.0;
         cycles := 0;
         last_time := now
@@ -87,3 +87,5 @@ let main () =
           exit 0
 
 let () = main ()
+
+ (* (ocamlopt_flags (-O3 -unsafe -inlining-report)) *)

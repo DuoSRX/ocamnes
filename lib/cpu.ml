@@ -55,7 +55,11 @@ let store_byte cpu address value =
     cpu.memory.(address land 0x7FF) <- value
   else if (address lsr 13) = 1 then
     Ppu.write_register cpu.ppu address value
-  else
+  else if address = 0x4014 then (
+    Array.blit ~src:cpu.memory ~src_pos:(value * 0x100)
+               ~dst:cpu.ppu.oam ~dst_pos:0 ~len:255;
+    cpu.extra_cycles <- cpu.extra_cycles + 514
+  ) else
     cpu.rom.prg.(address land 0x3FFF) <- value
 
 let load_word cpu address =
@@ -613,7 +617,7 @@ module Debugger = struct
   (* let breakpoints = ref (Int.Set.of_list [0xEC6D]) *)
   let breakpoints = ref (Int.Set.of_list [])
   let break_on_step = ref false
-  let break_after = ref 1000000
+  let break_after = ref 100000000
 
   let rec prompt cpu =
     print_string "(DEBUG) ";

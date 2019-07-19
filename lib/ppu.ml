@@ -176,6 +176,61 @@ let end_vblank ppu =
   ppu.vblank <- false;
   ppu.registers.status <- ppu.registers.status land (lnot 0x80)
 
+let sprite_address ppu =
+  match ppu.registers.control land 0x8 with
+  | 0 -> 0
+  | _ -> 0x1000
+
+type sprite = {
+  x : int;
+  y : int;
+  index : int;
+  attributes : int;
+}
+
+let sprite_pixel ppu x =
+  let spixel = ref None in
+
+  for n = 0 to 63 do
+    let sprite = {
+      x = ppu.oam.(n * 4 + 3);
+      y = ppu.oam.(n * 4);
+      index = ppu.oam.(n * 4 + 1);
+      attributes = ppu.oam.(n * 4 + 2);
+    } in
+    let size = 8 in (* TODO: read the actual size from PPUCTRL *)
+    let in_box = x >= sprite.x && x < sprite.x + size in
+    let on_scanline = not (ppu.scanline < sprite.y) && (ppu.scanline < sprite.y + 8) in
+
+    if in_box && on_scanline then (
+      let tile = sprite.index + sprite_address ppu in
+      let sprite_x = x - sprite.x in
+      let sprite_y = ppu.scanline - sprite.y in
+      (* TODO: Flip sprites *)
+      let offset = ((tile lsl 4) + sprite_y) + sprite_address ppu in
+      let pixel = get_pixel ppu sprite_x (offset land 0xFFFF) in
+
+      if pixel <> 0 then (
+        let sprite_palette = (sprite.attributes land 0x3) + 4 in
+        let colour = (sprite_palette lsl 2) lor pixel in
+        let palette_address = 0x3F00 + colour in
+        let palette = load ppu (palette_address) in
+        spixel := Some (all_palettes.(palette land 0x3F))
+      )
+    );
+  done;
+  !spixel
+
+let make_scanline ppu =
+  for x = 0 to 255 do
+    let colour = get_background_pixel ppu x in
+    set_pixel ppu x ppu.scanline colour;
+
+    match sprite_pixel ppu x with
+    | Some(colour) -> set_pixel ppu x ppu.scanline colour;
+    | _ -> ()
+  done
+
 let step ppu cpu_cycle =
   ppu.nmi <- false;
   ppu.new_frame <- false;
@@ -185,10 +240,7 @@ let step ppu cpu_cycle =
 
     if not (next_scanline > cpu_cycle) then (
       if ppu.scanline < 240 then (
-        for x = 0 to 255 do
-          let colour = get_background_pixel ppu x in
-          set_pixel ppu x ppu.scanline colour
-        done;
+        make_scanline ppu
       );
       ppu.scanline <- ppu.scanline + 1;
       match ppu.scanline with
