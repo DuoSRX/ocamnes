@@ -10,9 +10,7 @@ let logs = Array.create ~len:log_length ""
 let term = ref false
 
 let memory = Array.create ~len:0x800 0
-(* let rom = load_rom "./roms/instr_test-v5/official_only.nes" *)
 (* let rom = load_rom "./roms/instr_test-v5/rom_singles/01-basics.nes" *)
-(* let rom = load_rom "./roms/instr_test-v5/rom_singles/03-immediate.nes" *)
 (* let rom = load_rom "./roms/nestest.nes" *)
 (* let rom = load_rom "./roms/color_test.nes" *)
 (* let rom = load_rom "./roms/ice_climber.nes" *)
@@ -36,7 +34,11 @@ let update_input keycode ~down = match keycode with
 | `Right -> Input.controller_state.right <- down
 | _ -> ()
 
-let event_loop window renderer texture =
+let sdl_try result = match result with
+| Ok res -> res
+| Error (`Msg m) -> Sdl.log "Create renderer error %s" m; exit 1
+
+let event_loop ~window ~renderer ~texture =
   let e = Sdl.Event.create () in
   let last_time = ref (Unix.gettimeofday ()) in
   let frames = ref 0.0 in
@@ -62,10 +64,10 @@ let event_loop window renderer texture =
 
       cpu.ppu.new_frame <- false;
 
-      let _ = Sdl.update_texture texture None cpu.ppu.frame_content (256 * 3) in
-      let _ = Sdl.render_clear renderer in
-      let _ = Sdl.render_copy renderer texture in
-      let _ = Sdl.render_present renderer in
+      Sdl.update_texture texture None cpu.ppu.frame_content (256 * 3) |> sdl_try;
+      Sdl.render_clear renderer |> sdl_try;
+      Sdl.render_copy renderer texture |> sdl_try;
+      Sdl.render_present renderer;
 
       let key_scancode e = Sdl.Scancode.enum Sdl.Event.(get e keyboard_scancode) in
       while Sdl.poll_event (Some e) do
@@ -87,26 +89,17 @@ let event_loop window renderer texture =
 let main () =
   cpu.pc <- Cpu.load_word cpu 0xFFFC;
 
-  match Sdl.init Sdl.Init.(everything) with
-  | Error (`Msg e) -> Sdl.log "Init error %s" e; exit 1
-  | Ok () ->
-    Sdl.log "SDL loaded...";
-    let flags = Sdl.Window.(+) Sdl.Window.shown Sdl.Window.opengl in
-    match Sdl.create_window ~w:512 ~h:480 "SDL OpenGL" flags with
-    | Error (`Msg e) -> Sdl.log "Create window error %s" e; exit 1
-    | Ok w ->
-      match Sdl.create_renderer w ~flags:(Sdl.Renderer.accelerated) with
-      | Error (`Msg e) -> Sdl.log "Create renderer error %s" e; exit 1
-      | Ok renderer ->
-        match Sdl.create_texture renderer Sdl.Pixel.format_rgb24 Sdl.Texture.access_streaming ~w:256 ~h:240 with
-        | Error (`Msg e) -> Sdl.log "Create texture error %s" e; exit 1
-        | Ok texture ->
-          event_loop w renderer texture;
-          (* Array.iter logs ~f:print_endline; *)
-          printf "Cycles: %d Steps: %d" cpu.cycles cpu.steps;
-          Sdl.log "Bye!";
-          Sdl.quit ();
-          exit 0
+  Sdl.init Sdl.Init.(video + events) |> sdl_try;
+  Sdl.log "SDL Loaded";
+
+  let flags = Sdl.Window.(shown + opengl) in
+  let window = sdl_try @@ Sdl.create_window ~w:512 ~h:480 "Ocamnes" flags in
+  let renderer = sdl_try @@ Sdl.create_renderer window ~flags:(Sdl.Renderer.accelerated) in
+  let texture = sdl_try @@ Sdl.create_texture renderer Sdl.Pixel.format_rgb24 Sdl.Texture.access_streaming ~w:256 ~h:240 in
+  event_loop ~window ~renderer ~texture;
+  Sdl.log "Bye!";
+  Sdl.quit ();
+  exit 0
 
 let () = main ()
 
