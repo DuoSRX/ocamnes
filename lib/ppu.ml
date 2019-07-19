@@ -135,6 +135,9 @@ let background_pattern_table_address ppu =
   | 0 -> 0
   | _ -> 0x1000
 
+let show_sprites ppu = ppu.registers.mask land 0x10 > 0
+let show_background ppu = ppu.registers.mask land 0x08 > 0
+
 let get_pixel ppu x offset =
   let p0 = load ppu offset in
   let p1 = load ppu (offset + 8) in
@@ -234,12 +237,16 @@ let sprite_pixel ppu x =
 
 let make_scanline ppu =
   for x = 0 to 255 do
-    let colour = get_background_pixel ppu x in
-    set_pixel ppu x ppu.scanline colour;
+    if show_background ppu then
+      set_pixel ppu x ppu.scanline (get_background_pixel ppu x)
+    else
+      set_pixel ppu x ppu.scanline 0;
 
-    match sprite_pixel ppu x with
-    | Some(colour) -> set_pixel ppu x ppu.scanline colour;
-    | _ -> ()
+    if show_sprites ppu then (
+      match sprite_pixel ppu x with
+      | Some(colour) -> set_pixel ppu x ppu.scanline colour;
+      | _ -> ()
+    )
   done
 
 let step ppu cpu_cycle =
