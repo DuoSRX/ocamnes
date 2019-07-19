@@ -95,7 +95,7 @@ let read_register ppu = function
     ppu.registers.status
     (* let result = ppu.register land 0x1F lor (if ppu.vblank then 0x80 else 0) in
     result *)
-  (* | 0x2004 -> ppu.oam.(ppu.registers.oam) *)
+  | 0x2004 -> ppu.oam.(ppu.registers.oam)
   | 0x2005 -> ppu.registers.scroll
   | 0x2007 ->
     let address = ppu.registers.address in
