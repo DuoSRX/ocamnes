@@ -267,7 +267,7 @@ let bit cpu byte =
   cpu.zero <- result = 0
 
 let php cpu =
-  let flags = (flags_to_int cpu) lor (Flags.b) in
+  let flags = (flags_to_int cpu) lor Flags.break4 in
   push_byte cpu flags
 
 let plp cpu =
@@ -338,7 +338,8 @@ let rti cpu =
 
 let nmi cpu =
   push_word cpu cpu.pc;
-  php cpu;
+  let flags = (flags_to_int cpu) lor Flags.break5 in
+  push_byte cpu flags;
   cpu.pc <- load_word cpu 0xFFFA
 
 let op_is_branch = function
