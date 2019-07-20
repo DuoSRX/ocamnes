@@ -63,7 +63,7 @@ let make ~rom = {
 
 let load ppu address =
   if address < 0x2000 then
-    ppu.rom.chr.(address) (* CHR *)
+    ppu.rom.chr.(address)
   else if address < 0x3F00 then
     ppu.nametables.(address land 0x07FF)
   else if address < 0x4000 then
@@ -73,7 +73,7 @@ let load ppu address =
 
 let store ppu address value =
   if address < 0x2000 then
-    () (* Can't write to CHR? *)
+    ppu.rom.chr.(address) <- value
   else if address < 0x3F00 then
     ppu.nametables.(address land 0x07FF) <- value
   else if address < 0x4000 then
