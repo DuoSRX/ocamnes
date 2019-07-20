@@ -98,9 +98,8 @@ let read_register ppu = function
   | 0x2004 -> ppu.oam.(ppu.registers.oam)
   | 0x2005 -> ppu.registers.scroll
   | 0x2007 ->
-    let address = ppu.registers.address in
-    ppu.registers.address <- ppu.registers.address + address_increment ppu;
-    load ppu address
+    ppu.registers.address <- ((ppu.registers.address + address_increment ppu) land 0x3FFF);
+    load ppu ppu.registers.address
   | _ as r -> failwith @@ sprintf "Cannot read PPU Register @ %04X" r
 
 let write_register ppu register value =
