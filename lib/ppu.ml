@@ -18,16 +18,14 @@ let all_palettes = [|
 
 module Registers = struct
   type registers = {
-    mutable control : int;
-    mutable mask : int;
-    mutable status : int;
-    mutable oam : int;
-    mutable scroll : int;
-    mutable address : int;
-    mutable data : int;
+    mutable control : int; (* $2000 *)
+    mutable mask : int;    (* $2001 *)
+    mutable status : int;  (* $2002 *)
+    mutable oam : int;     (* $2003 *)
+    mutable scroll : int;  (* $2005 *)
   }
   let make () = {
-    status = 0; address = 0; control = 0; mask = 0; scroll = 0; data = 0; oam = 0;
+    status = 0; control = 0; mask = 0; scroll = 0; oam = 0;
   }
 end
 
@@ -40,10 +38,15 @@ type ppu = {
   mutable nmi : bool;
   mutable new_frame : bool;
 
-  mutable w : bool; (* Write latch *)
-
   mutable scroll_x : int;
   mutable scroll_y : int;
+
+  (* Internal registers *)
+  mutable t : int;  (* temp vram address *)
+  mutable v : int;  (* vram address *)
+  mutable x : int;  (* final scroll *)
+  mutable w : bool; (* Write latch *)
+  mutable f : bool; (* Frame parity *)
 
   frame_content : (int, Bigarray.int8_unsigned_elt, Bigarray.c_layout) Bigarray.Array1.t;
   registers: Registers.registers;
@@ -55,14 +58,15 @@ type ppu = {
 }
 
 let make ~rom = {
-  cycle = 0; scanline = 0; frames = 0; w = true;
+  cycle = 0; scanline = 0; frames = 0;
+  t = 0; v = 0; x = 0; w = true; f = false;
   registers = Registers.make ();
   register = 0; vblank = true; nmi = false; new_frame = false; scroll_x = 0; scroll_y = 0;
   frame_content = Bigarray.Array1.create Bigarray.int8_unsigned Bigarray.c_layout (256 * 240 * 3);
   palettes = Array.create ~len:32 0;
   vram = Array.create ~len:0x800 0;
   oam = Array.create ~len:0x100 0;
-  nametables = Array.create ~len:0x800 0;
+  nametables = Array.create ~len:0x1000 0;
   rom;
 }
 
@@ -70,7 +74,11 @@ let load ppu address =
   if address < 0x2000 then
     ppu.rom.chr.(address)
   else if address < 0x3F00 then
-    ppu.nametables.(address land 0x07FF)
+    if address < 0x2800 then
+      ppu.nametables.(address land 0x3FF)
+    else
+      ppu.nametables.((address land 0x3FF) + 0x800)
+    (* ppu.nametables.(address land 0x07FF) *)
   else if address < 0x4000 then
     ppu.palettes.(address land 0x1F)
   else
@@ -80,7 +88,11 @@ let store ppu address value =
   if address < 0x2000 then
     ppu.rom.chr.(address) <- value
   else if address < 0x3F00 then
-    ppu.nametables.(address land 0x07FF) <- value
+    if address < 0x2800 then
+      ppu.nametables.(address land 0x3FF) <- value
+    else
+      ppu.nametables.((address land 0x3FF) + 0x800) <- value
+    (* ppu.nametables.(address land 0x07FF) <- value *)
   else if address < 0x4000 then (
     let a = address land 0x1F in
     ppu.palettes.(if a = 0x10 then 0 else a) <- value
@@ -88,61 +100,96 @@ let store ppu address value =
   else
     failwith @@ sprintf "Trying to write PPU VRAM @ %04X" address
 
+let x_scroll_offset ppu =
+  match ppu.registers.control land 0x1 with
+  | 0 -> 0
+  | _ -> 256
+
+let y_scroll_offset ppu =
+  match ppu.registers.control land 0x2 with
+  | 0 -> 0
+  | _ -> 240
+
+let base_nametable_address ppu =
+  match ppu.registers.control land 0x3 with
+  | 0 -> 0x2000
+  | 1 -> 0x2400
+  | 2 -> 0x2800
+  | 3 -> 0x2C00
+  | _ -> failwith "unreachable"
+
 let address_increment ppu =
-  match ppu.registers.control land 0x04 with
+  match ppu.registers.control land 0x4 with
   | 0 -> 1
   | _ -> 32
 
-let read_register ppu = function
-  | 0x2000 -> ppu.registers.control
-  | 0x2001 -> ppu.registers.mask
-  | 0x2002 ->
-    ppu.w <- true;
-    ppu.registers.status
-  | 0x2004 -> ppu.oam.(ppu.registers.oam)
-  (* | 0x2005 -> ppu.registers.scroll Should be read only? *)
-  | 0x2007 ->
-    ppu.registers.address <- ((ppu.registers.address + address_increment ppu) land 0x3FFF);
-    load ppu ppu.registers.address
-  | _ as r -> failwith @@ sprintf "Cannot read PPU Register @ %04X" r
-
-let write_register ppu register value =
-  ppu.register <- value;
-  match register with
-  | 0x2000 -> ppu.registers.control <- value
-  | 0x2001 -> ppu.registers.mask <- value
-  | 0x2003 -> ppu.registers.oam <- value
-  | 0x2004 ->
-    let address = ppu.registers.oam in
-    ppu.oam.(address) <- value;
-    ppu.registers.oam <- (address + 1) mod 0x100
-  | 0x2005 ->
-    if ppu.w then (
-      ppu.scroll_x <- (ppu.scroll_x land 0xFF00) lor value;
-      ppu.w <- false
-    ) else (
-      ppu.scroll_y <- (ppu.scroll_y land 0xFF00) lor value;
-      ppu.w <- true
-    );
-    ppu.registers.scroll <- value
-  | 0x2006 ->
-    if ppu.w then (
-      ppu.registers.address <- ((ppu.registers.address land 0xFF) lor (value lsl 8) land 0x3FFF);
-      ppu.w <- false
-    ) else (
-      ppu.registers.address <- (ppu.registers.address land 0xFF00) lor value;
-      ppu.w <- true;
-    )
-  | 0x2007 ->
-    let address = ppu.registers.address in
-    store ppu address value;
-    ppu.registers.address <- ((ppu.registers.address + address_increment ppu) land 0xFFFF) land 0x3FFF
-  | _ as r -> failwith @@ sprintf "Cannot write PPU Register @ %04X" r
+let sprite_address ppu =
+  match ppu.registers.control land 0x8 with
+  | 0 -> 0
+  | _ -> 0x1000
 
 let background_pattern_table_address ppu =
   match ppu.registers.control land 0x10 with
   | 0 -> 0
   | _ -> 0x1000
+
+let read_register ppu = function
+  | 0x2002 -> (* PPUSTATUS *)
+    ppu.w <- true; (* TODO: NMI Change *)
+    ppu.register <- ppu.register land 0x1F;
+    (* TODO: Sprite 0 and sprite overflow *)
+    ppu.registers.status
+  | 0x2004 -> (* OAMADDR *)
+    ppu.oam.(ppu.registers.oam)
+  | 0x2007 -> (* PPUDATA *)
+    let value = load ppu (ppu.v) in
+    ppu.v <- (ppu.v + address_increment ppu) land 0x3FFF;
+    value
+  | _ as r -> failwith @@ sprintf "Cannot read PPU Register @ %04X" r
+
+let write_register ppu register value =
+  ppu.register <- value;
+  match register with
+  | 0x2000 -> (* PPUCONTROL *)
+    ppu.registers.control <- value;
+    ppu.scroll_x <- (ppu.scroll_x land 0xFF) lor (x_scroll_offset ppu);
+    ppu.scroll_y <- (ppu.scroll_y land 0xFF) lor (y_scroll_offset ppu);
+    ppu.t <- (ppu.t land 0xF3FF) lor (((value land 0x3) lsl 10) land 0xFFFF)
+    (* TODO: Nmi change *)
+  | 0x2001 -> (* PPUMASK *)
+    ppu.registers.mask <- value
+  | 0x2003 -> (* PPUOAMADDR *)
+    ppu.registers.oam <- value
+  | 0x2004 -> (* OAMDATA *)
+    let address = ppu.registers.oam in
+    ppu.oam.(address) <- value;
+    ppu.registers.oam <- (address + 1) % 0x100
+  | 0x2005 -> (* PPUSCROLL *)
+    if ppu.w then (
+      ppu.scroll_x <- (ppu.scroll_x land 0xFF00) lor value;
+      ppu.w <- false;
+      ppu.t <- (ppu.t land 0xFFE0) land (value lsr 3);
+      ppu.x <- value land 0x7;
+    ) else (
+      ppu.scroll_y <- (ppu.scroll_y land 0xFF00) lor value;
+      ppu.w <- true;
+      ppu.t <- (ppu.t land 0x8FFF) lor (((value land 0x07) lsl 12) land 0xFFFF);
+      ppu.t <- (ppu.t land 0xFC1F) lor (((value land 0xF8) lsl 2) land 0xFFFF);
+    );
+    ppu.registers.scroll <- value
+  | 0x2006 -> (* PPUADDR *)
+    if ppu.w then (
+      ppu.w <- false;
+      ppu.t <- (ppu.t land 0x80FF) lor (((value land 0x3F) lsl 8) land 0xFFFF);
+    ) else (
+      ppu.w <- true;
+      ppu.t <- (ppu.t land 0xFF00) lor value;
+      ppu.v <- ppu.t;
+    )
+  | 0x2007 -> (* PPUDATA *)
+    store ppu ppu.v value;
+    ppu.v <- (ppu.v + address_increment ppu) land 0x3FFF;
+  | _ as r -> failwith @@ sprintf "Cannot write PPU Register @ %04X" r
 
 let start_vblank ppu =
   if (ppu.registers.control land 0x80) > 0 then
@@ -171,11 +218,16 @@ let get_background_pixel ppu x =
   let x_index = (x / 8) % 64 in
   let y_index = (y / 8) % 60 in
 
+  (* let base_addr = base_nametable_address ppu in *)
   let base_addr = match (x_index >= 32, y_index >= 30) with
-  | (true, true)   -> 0x2C00
+  | (true, true)   -> 0x2800
+  | (true, false)  -> 0x2800
+  | (false, true)  -> 0x2000
+  | (false, false) -> 0x2000
+  (* | (true, true)   -> 0x2C00
   | (true, false)  -> 0x2400
   | (false, true)  -> 0x2800
-  | (false, false) -> 0x2000
+  | (false, false) -> 0x2000 *)
   in
 
   let x_index_2 = (x_index % 32) land 0xFF in
@@ -215,11 +267,6 @@ let set_pixel ppu x y color =
   ppu.frame_content.{(y * 256 + x) * 3 + 2} <- color;
   ppu.frame_content.{(y * 256 + x) * 3 + 1} <- color lsr 8;
   ppu.frame_content.{(y * 256 + x) * 3 + 0} <- color lsr 16
-
-let sprite_address ppu =
-  match ppu.registers.control land 0x8 with
-  | 0 -> 0
-  | _ -> 0x1000
 
 type sprite = {
   x : int;
@@ -296,6 +343,7 @@ let step ppu cpu_cycle =
         ppu.scanline <- 0;
         ppu.frames <- ppu.frames + 1;
         ppu.new_frame <- true;
+        ppu.f <- not ppu.f;
         end_vblank ppu
       | _ -> ();
 
