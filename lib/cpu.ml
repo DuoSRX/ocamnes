@@ -551,6 +551,7 @@ let decode opcode =
   | 0xE8 -> (INX, Implicit, 2, 0)
   | 0xE9 -> (SBC, Immediate, 2, 0)
   | 0xEA -> (NOP, Implicit, 2, 0)
+  | 0xEB -> (SBC, Immediate, 2, 0)
   | 0xEC -> (CPX, Absolute, 4, 0)
   | 0xED -> (SBC, Absolute, 4, 0)
   | 0xEE -> (INC, Absolute, 6, 0)
@@ -562,7 +563,7 @@ let decode opcode =
   | 0xF9 -> (SBC, AbsoluteY, 4, 0)
   | 0xFD -> (SBC, AbsoluteX, 4, 0)
   | 0xFE -> (INC, AbsoluteX, 7, 0)
-  | _ -> failwith @@ sprintf "Unknown opcode %#02x" opcode
+  | _ -> failwith @@ sprintf "Unknown opcode %02X" opcode
 
 let decode_instruction cpu instruction =
   let (op, mode, cycles, extra_page_cycles) = decode instruction in
@@ -698,10 +699,10 @@ let step ?(trace_fun = trace) cpu =
   let opcode = load_byte cpu cpu.pc in
   let instruction = decode_instruction cpu opcode in
   let log = if cpu.tracing then Some (trace_fun cpu instruction opcode) else None in
+  on_step cpu instruction opcode;
   cpu.pc <- cpu.pc + instruction.size;
   execute_instruction cpu instruction;
   cpu.cycles <- cpu.cycles + instruction.cycles + cpu.extra_cycles;
   cpu.extra_cycles <- 0;
   cpu.steps <- cpu.steps + 1;
-  on_step cpu instruction opcode;
   log
