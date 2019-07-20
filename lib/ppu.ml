@@ -35,11 +35,16 @@ type ppu = {
   mutable cycle : int;
   mutable scanline : int;
   mutable frames : int;
-  mutable vram_rw_high : bool;
   mutable register : int;
   mutable vblank : bool;
   mutable nmi : bool;
   mutable new_frame : bool;
+
+  mutable w : bool; (* Write latch *)
+
+  mutable scroll_x : int;
+  mutable scroll_y : int;
+
   frame_content : (int, Bigarray.int8_unsigned_elt, Bigarray.c_layout) Bigarray.Array1.t;
   registers: Registers.registers;
   palettes : int array;
@@ -50,9 +55,9 @@ type ppu = {
 }
 
 let make ~rom = {
-  cycle = 0; scanline = 0; frames = 0; vram_rw_high = true;
+  cycle = 0; scanline = 0; frames = 0; w = true;
   registers = Registers.make ();
-  register = 0; vblank = true; nmi = false; new_frame = false;
+  register = 0; vblank = true; nmi = false; new_frame = false; scroll_x = 0; scroll_y = 0;
   frame_content = Bigarray.Array1.create Bigarray.int8_unsigned Bigarray.c_layout (256 * 240 * 3);
   palettes = Array.create ~len:32 0;
   vram = Array.create ~len:0x800 0;
@@ -76,8 +81,10 @@ let store ppu address value =
     ppu.rom.chr.(address) <- value
   else if address < 0x3F00 then
     ppu.nametables.(address land 0x07FF) <- value
-  else if address < 0x4000 then
-    ppu.palettes.(address land 0x1F) <- value
+  else if address < 0x4000 then (
+    let a = address land 0x1F in
+    ppu.palettes.(if a = 0x10 then 0 else a) <- value
+  )
   else
     failwith @@ sprintf "Trying to write PPU VRAM @ %04X" address
 
@@ -90,13 +97,10 @@ let read_register ppu = function
   | 0x2000 -> ppu.registers.control
   | 0x2001 -> ppu.registers.mask
   | 0x2002 ->
-    (* ppu.registers.status <- ppu.registers.status lxor 0x80; *)
-    ppu.vram_rw_high <- true;
+    ppu.w <- true;
     ppu.registers.status
-    (* let result = ppu.register land 0x1F lor (if ppu.vblank then 0x80 else 0) in
-    result *)
   | 0x2004 -> ppu.oam.(ppu.registers.oam)
-  | 0x2005 -> ppu.registers.scroll
+  (* | 0x2005 -> ppu.registers.scroll Should be read only? *)
   | 0x2007 ->
     ppu.registers.address <- ((ppu.registers.address + address_increment ppu) land 0x3FFF);
     load ppu ppu.registers.address
@@ -113,15 +117,21 @@ let write_register ppu register value =
     ppu.oam.(address) <- value;
     ppu.registers.oam <- (address + 1) mod 0x100
   | 0x2005 ->
-    ppu.vram_rw_high <- not ppu.vram_rw_high;
-    ppu.registers.scroll <- value (* TODO: write to scroll horizontal or vertical *)
+    if ppu.w then (
+      ppu.scroll_x <- (ppu.scroll_x land 0xFF00) lor value;
+      ppu.w <- false
+    ) else (
+      ppu.scroll_y <- (ppu.scroll_y land 0xFF00) lor value;
+      ppu.w <- true
+    );
+    ppu.registers.scroll <- value
   | 0x2006 ->
-    if ppu.vram_rw_high then (
+    if ppu.w then (
       ppu.registers.address <- ((ppu.registers.address land 0xFF) lor (value lsl 8) land 0x3FFF);
-      ppu.vram_rw_high <- false
+      ppu.w <- false
     ) else (
       ppu.registers.address <- (ppu.registers.address land 0xFF00) lor value;
-      ppu.vram_rw_high <- true
+      ppu.w <- true;
     )
   | 0x2007 ->
     let address = ppu.registers.address in
@@ -134,6 +144,16 @@ let background_pattern_table_address ppu =
   | 0 -> 0
   | _ -> 0x1000
 
+let start_vblank ppu =
+  if (ppu.registers.control land 0x80) > 0 then
+    ppu.nmi <- true;
+  ppu.vblank <- true;
+  ppu.registers.status <- ppu.registers.status lor 0x80
+
+let end_vblank ppu =
+  ppu.vblank <- false;
+  ppu.registers.status <- ppu.registers.status land (lnot 0x80)
+
 let show_sprites ppu = ppu.registers.mask land 0x10 > 0
 let show_background ppu = ppu.registers.mask land 0x08 > 0
 
@@ -145,47 +165,56 @@ let get_pixel ppu x offset =
   (bit1 lsl 1) lor bit0
 
 let get_background_pixel ppu x =
-  let x_offset = x / 8 in
-  let y_offset = ppu.scanline / 8 in
-  let x2 = x % 8 in
-  let y2 = (ppu.scanline % 8) land 0xFF in
+  let x = x + ppu.scroll_x in
+  let y = ppu.scanline + ppu.scroll_y in
 
-  let tile_address = 0x2000 + 32 * y_offset + x_offset in
+  let x_index = (x / 8) % 64 in
+  let y_index = (y / 8) % 60 in
+
+  let base_addr = match (x_index >= 32, y_index >= 30) with
+  | (true, true)   -> 0x2C00
+  | (true, false)  -> 0x2400
+  | (false, true)  -> 0x2800
+  | (false, false) -> 0x2000
+  in
+
+  let x_index_2 = (x_index % 32) land 0xFF in
+  let y_index_2 = (y_index % 30) land 0xFF in
+
+  let x2 = (x % 8) land 0xFF in
+  let y2 = (y % 8) land 0xFF in
+
+  let tile_address = base_addr + (32 * y_index_2) + x_index_2 in
   let tile = load ppu tile_address in
+
   let offset = (((tile lsl 4) + y2) land 0xFFFF) + background_pattern_table_address ppu in
   let pixel = get_pixel ppu x2 offset in
 
-  let block = y_offset / 4 * 8 + x_offset / 4 in
-  let attributes = load ppu (0x23C0 + block) in
-  let left = x_offset % 4 < 2 in
-  let top = y_offset % 4 < 2 in
+  if pixel = 0 then (
+    0
+  ) else (
+    let block = y_index_2 / 4 * 8 + x_index_2 / 4 in
+    let attributes = load ppu (0x03C0 + base_addr + block) in
+    let left = x_index_2 % 4 < 2 in
+    let top = y_index_2 % 4 < 2 in
 
-  let c = match (left, top) with
-  | (true, true)   -> attributes
-  | (false, true)  -> attributes lsr 2
-  | (true, false)  -> attributes lsr 4
-  | (false, false) -> attributes lsr 6
-  in
+    let c = match (left, top) with
+    | (true, true)   -> attributes
+    | (false, true)  -> attributes lsr 2
+    | (true, false)  -> attributes lsr 4
+    | (false, false) -> attributes lsr 6
+    in
 
-  let color = ((c land 0x3) lsl 2) lor pixel in
-  let palette_address = 0x3F00 + color in
-  let palette = load ppu (palette_address) in
-  all_palettes.(palette land 0x3F)
+    let color = ((c land 0x3) lsl 2) lor pixel in
+    let palette_address = 0x3F00 + color in
+    let palette = load ppu (palette_address) in
+    all_palettes.(palette land 0x3F)
+  )
 
 let set_pixel ppu x y color =
   ppu.frame_content.{(y * 256 + x) * 3 + 2} <- color;
   ppu.frame_content.{(y * 256 + x) * 3 + 1} <- color lsr 8;
   ppu.frame_content.{(y * 256 + x) * 3 + 0} <- color lsr 16
-
-let start_vblank ppu =
-  if (ppu.registers.control land 0x80) > 0 then
-    ppu.nmi <- true;
-  ppu.vblank <- true;
-  ppu.registers.status <- ppu.registers.status lor 0x80
-
-let end_vblank ppu =
-  ppu.vblank <- false;
-  ppu.registers.status <- ppu.registers.status land (lnot 0x80)
 
 let sprite_address ppu =
   match ppu.registers.control land 0x8 with
@@ -205,7 +234,7 @@ let sprite_pixel ppu x =
   for n = 0 to 63 do
     let sprite = {
       x = ppu.oam.(n * 4 + 3);
-      y = ppu.oam.(n * 4);
+      y = ppu.oam.(n * 4) + 1;
       index = ppu.oam.(n * 4 + 1);
       attributes = ppu.oam.(n * 4 + 2);
     } in
