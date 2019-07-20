@@ -30,7 +30,7 @@ module Registers = struct
 end
 
 type ppu = {
-  mutable cycle : int;
+  mutable cycles : int;
   mutable scanline : int;
   mutable frames : int;
   mutable register : int;
@@ -40,6 +40,7 @@ type ppu = {
 
   mutable scroll_x : int;
   mutable scroll_y : int;
+  mutable sprite_count : int;
 
   (* Internal registers *)
   mutable t : int;  (* temp vram address *)
@@ -58,10 +59,11 @@ type ppu = {
 }
 
 let make ~rom = {
-  cycle = 0; scanline = 0; frames = 0;
+  cycles = 0; scanline = 0; frames = 0;
   t = 0; v = 0; x = 0; w = true; f = false;
   registers = Registers.make ();
-  register = 0; vblank = true; nmi = false; new_frame = false; scroll_x = 0; scroll_y = 0;
+  register = 0; vblank = true; nmi = false; new_frame = false;
+  scroll_x = 0; scroll_y = 0; sprite_count = 0;
   frame_content = Bigarray.Array1.create Bigarray.int8_unsigned Bigarray.c_layout (256 * 240 * 3);
   palettes = Array.create ~len:32 0;
   vram = Array.create ~len:0x800 0;
@@ -204,150 +206,97 @@ let end_vblank ppu =
 let show_sprites ppu = ppu.registers.mask land 0x10 > 0
 let show_background ppu = ppu.registers.mask land 0x08 > 0
 
-let get_pixel ppu x offset =
-  let p0 = load ppu offset in
-  let p1 = load ppu (offset + 8) in
-  let bit0 = (p0 lsr (7 - ((x % 8) land 0xFF))) land 1 in
-  let bit1 = (p1 lsr (7 - ((x % 8) land 0xFF))) land 1 in
-  (bit1 lsl 1) lor bit0
+(* let nametable_byte_byte ppu = ()
+let attribute_table_byte ppu = ()
+let low_tile_byte ppu = ()
+let high_tile_byte ppu = ()
+let store_tile_data ppu = () *)
 
-let get_background_pixel ppu x =
-  let x = x + ppu.scroll_x in
-  let y = ppu.scanline + ppu.scroll_y in
-
-  let x_index = (x / 8) % 64 in
-  let y_index = (y / 8) % 60 in
-
-  (* let base_addr = base_nametable_address ppu in *)
-  let base_addr = match (x_index >= 32, y_index >= 30) with
-  | (true, true)   -> 0x2800
-  | (true, false)  -> 0x2800
-  | (false, true)  -> 0x2000
-  | (false, false) -> 0x2000
-  (* | (true, true)   -> 0x2C00
-  | (true, false)  -> 0x2400
-  | (false, true)  -> 0x2800
-  | (false, false) -> 0x2000 *)
-  in
-
-  let x_index_2 = (x_index % 32) land 0xFF in
-  let y_index_2 = (y_index % 30) land 0xFF in
-
-  let x2 = (x % 8) land 0xFF in
-  let y2 = (y % 8) land 0xFF in
-
-  let tile_address = base_addr + (32 * y_index_2) + x_index_2 in
-  let tile = load ppu tile_address in
-
-  let offset = (((tile lsl 4) + y2) land 0xFFFF) + background_pattern_table_address ppu in
-  let pixel = get_pixel ppu x2 offset in
-
-  if pixel = 0 then (
-    0
+let increment_x ppu =
+  if ppu.v land 0x1F = 0x1F then (
+    ppu.v <- ppu.v land 0xFFE0;
+    ppu.v <- ppu.v lxor 0x0400;
   ) else (
-    let block = y_index_2 / 4 * 8 + x_index_2 / 4 in
-    let attributes = load ppu (0x03C0 + base_addr + block) in
-    let left = x_index_2 % 4 < 2 in
-    let top = y_index_2 % 4 < 2 in
-
-    let c = match (left, top) with
-    | (true, true)   -> attributes
-    | (false, true)  -> attributes lsr 2
-    | (true, false)  -> attributes lsr 4
-    | (false, false) -> attributes lsr 6
-    in
-
-    let color = ((c land 0x3) lsl 2) lor pixel in
-    let palette_address = 0x3F00 + color in
-    let palette = load ppu (palette_address) in
-    all_palettes.(palette land 0x3F)
+    ppu.v <- ppu.v + 1
   )
 
-let set_pixel ppu x y color =
-  ppu.frame_content.{(y * 256 + x) * 3 + 2} <- color;
-  ppu.frame_content.{(y * 256 + x) * 3 + 1} <- color lsr 8;
-  ppu.frame_content.{(y * 256 + x) * 3 + 0} <- color lsr 16
+let increment_y ppu =
+  if ppu.v land 0x7000 <> 0x7000 then (
+    ppu.v <- ppu.v + 0x1000
+  ) else (
+    ppu.v <- ppu.v land 0x8FFF;
+    let y = match (ppu.v land 0x03E0) lsr 5 with
+    | 29 -> ppu.v <- ppu.v lxor 0x0800; 0
+    | 31 -> 0
+    | other -> other + 1
+    in
+    ppu.v <- (ppu.v land 0xFC1F) lor (y lsl 5)
+  )
 
-type sprite = {
-  x : int;
-  y : int;
-  index : int;
-  attributes : int;
-}
-
-let sprite_pixel ppu x =
-  let spixel = ref None in
-
-  for n = 0 to 63 do
-    let sprite = {
-      x = ppu.oam.(n * 4 + 3);
-      y = ppu.oam.(n * 4) + 1;
-      index = ppu.oam.(n * 4 + 1);
-      attributes = ppu.oam.(n * 4 + 2);
-    } in
-    let size = 8 in (* TODO: read the actual size from PPUCTRL *)
-    let in_box = x >= sprite.x && x < sprite.x + size in
-    let on_scanline = not (ppu.scanline < sprite.y) && (ppu.scanline < sprite.y + 8) in
-
-    if in_box && on_scanline then (
-      let tile = sprite.index + sprite_address ppu in
-      let hflip = sprite.attributes land 0x40 > 0 in
-      let vflip = sprite.attributes land 0x80 > 0 in
-      let sprite_x = if hflip then 7 - (x - sprite.x) else x - sprite.x in
-      let sprite_y = if vflip then 7 - (ppu.scanline - sprite.y) else ppu.scanline - sprite.y in
-
-      let offset = ((tile lsl 4) + sprite_y) + sprite_address ppu in
-      let pixel = get_pixel ppu sprite_x (offset land 0xFFFF) in
-
-      if pixel <> 0 then (
-        let sprite_palette = (sprite.attributes land 0x3) + 4 in
-        let colour = (sprite_palette lsl 2) lor pixel in
-        let palette_address = 0x3F00 + colour in
-        let palette = load ppu (palette_address) in
-        spixel := Some (all_palettes.(palette land 0x3F))
-      )
-    );
-  done;
-  !spixel
-
-let make_scanline ppu =
-  for x = 0 to 255 do
-    if show_background ppu then
-      set_pixel ppu x ppu.scanline (get_background_pixel ppu x)
-    else
-      set_pixel ppu x ppu.scanline 0;
-
-    if show_sprites ppu then (
-      match sprite_pixel ppu x with
-      | Some(colour) -> set_pixel ppu x ppu.scanline colour;
-      | _ -> ()
-    )
-  done
-
-let step ppu cpu_cycle =
-  ppu.nmi <- false;
-  ppu.new_frame <- false;
-
-  let rec loop () =
-    let next_scanline = 114 + ppu.cycle in
-
-    if not (next_scanline > cpu_cycle) then (
-      if ppu.scanline < 240 then (
-        make_scanline ppu
-      );
+let step ppu =
+  if (show_background ppu || show_sprites ppu) && ppu.f && ppu.scanline = 261 && ppu.cycles = 339 then (
+    ppu.cycles <- 0;
+    ppu.scanline <- 0;
+    ppu.frames <- ppu.frames + 1;
+    ppu.f <- not ppu.f;
+  ) else (
+    ppu.cycles <- ppu.cycles + 1;
+    if ppu.cycles > 340 then (
+      ppu.cycles <- 0;
       ppu.scanline <- ppu.scanline + 1;
-      match ppu.scanline with
-      | 241 ->
-        start_vblank ppu
-      | 261 ->
+      if ppu.scanline > 261 then (
         ppu.scanline <- 0;
         ppu.frames <- ppu.frames + 1;
-        ppu.new_frame <- true;
-        ppu.f <- not ppu.f;
-        end_vblank ppu
-      | _ -> ();
-
-      ppu.cycle <- ppu.cycle + 114;
-      loop ()
+        ppu.f <- not ppu.f
+      )
     );
-  in loop ();
+  );
+
+  let pre_sl = ppu.scanline = 261 in
+  let prefetch = ppu.cycles >= 321 && ppu.cycles <= 336 in
+	let visible_sl = ppu.scanline < 240 in
+	let visible_cy = ppu.cycles >= 1 && ppu.cycles <= 256 in
+  let render_sl = pre_sl || visible_sl in
+  let fetch_cy = prefetch || visible_cy in
+
+  if show_background ppu || show_sprites ppu then (
+    if visible_sl && visible_cy then (
+      () (* TODO: Render pixel *)
+    );
+    if render_sl && fetch_cy then (
+      () (* TODO: Fetch tile data and such *)
+    );
+    if pre_sl && ppu.cycles >= 280 && ppu.cycles <= 304 then (
+      (* Copy Y *)
+      ppu.v <- (ppu.v land 0x841F) lor (ppu.v land 0x7BE0)
+    );
+    if render_sl then (
+      if fetch_cy && ppu.cycles % 8 = 0 then (
+        increment_x ppu;
+      );
+      if ppu.cycles = 256 then (
+        increment_y ppu;
+      );
+      if ppu.cycles = 257 then (
+        (* Copy X *)
+        ppu.v <- (ppu.v land 0xFBE0) lor (ppu.v land 0x041F)
+      );
+    );
+
+    if ppu.cycles = 257 then (
+      if visible_sl then (
+        () (* TODO: eval sprites *)
+      ) else (
+        () (* TODO: update sprite count *)
+      )
+    )
+  );
+
+  if ppu.scanline = 241 && ppu.cycles = 1 then (
+    () (* TODO: set vblank *)
+  );
+
+  if pre_sl && ppu.cycles = 1 then (
+    (* TODO: clear VBLANK, sprite0 and overflow *)
+    ()
+  )
