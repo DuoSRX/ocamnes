@@ -60,17 +60,20 @@ let load_byte cpu address =
   else
     cpu.rom.prg.(address land 0x3FFF)
 
+let dma cpu address =
+  let page = address * 0x100 in
+  for x = 0 to 255 do
+    Ppu.write_register cpu.ppu 0x2004 (load_byte cpu (page + x))
+  done;
+  cpu.extra_cycles <- cpu.extra_cycles + 514
+
 let store_byte cpu address value =
   if address < 0x2000 then
     cpu.memory.(address land 0x7FF) <- value
   else if (address lsr 13) = 1 then
     Ppu.write_register cpu.ppu address value
-  else if address = 0x4014 then (
-    let page = value * 0x100 in
-    for x = 0 to 255 do
-      Ppu.write_register cpu.ppu 0x2004 (load_byte cpu (page + x))
-    done;
-    cpu.extra_cycles <- cpu.extra_cycles + 514)
+  else if address = 0x4014 then
+    dma cpu value
   else if address >= 0x4000 && address <= 0x4020 then
     () (* TODO: controllers, APU...etc *)
   else if address < 0x8000 then
