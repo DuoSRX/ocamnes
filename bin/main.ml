@@ -46,11 +46,23 @@ let event_loop ~window ~renderer ~texture =
   let do_quit = ref false in
 
   while not !do_quit do
+    (* let log = Option.value_exn (step cpu ~trace_fun:trace) in
+    logs.(cpu.steps % log_length) <- log; *)
+    (* print_endline log; *)
+    let prev_cycles = cpu.cycles in
     ignore @@ step cpu;
-    if cpu.ppu.nmi then Cpu.nmi cpu;
-    Ppu.step cpu.ppu cpu.cycles;
+    let elapsed_cycles = cpu.cycles - prev_cycles in
 
-    if cpu.ppu.new_frame then (
+    (* if cpu.ppu.nmi then Cpu.nmi cpu; *)
+
+    for _ = 1 to elapsed_cycles do
+      Ppu.step cpu.ppu
+    done;
+
+    (* Ppu.step cpu.ppu cpu.cycles; *)
+
+    (* if cpu.ppu.new_frame then ( *)
+    if cpu.ppu.f then (
       let now = Unix.gettimeofday () in
       if now >= (!last_time +. 1.0) then (
         ignore @@ Sdl.set_window_title window (sprintf "%.1f FPS" !frames);
