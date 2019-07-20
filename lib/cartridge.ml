@@ -36,9 +36,16 @@ let load_rom path =
   let headers = load_headers rom in
   (* printf "Loaded rom %s\n" path;
   printf "PRG:%04x CHR:%04x Mapper:%d\n" headers.prg_size headers.chr_size headers.mapper; *)
+
+  let chr = if headers.chr_size = 0 then
+    Array.create ~len:0x2000 0
+  else
+    Array.slice rom (0x10 + headers.prg_size) (0x10 + headers.prg_size + headers.chr_size)
+  in
+
   {
     headers;
     prg = Array.slice rom 0x10 (0x10 + headers.prg_size);
-    chr = Array.slice rom (0x10 + headers.prg_size) (0x10 + headers.prg_size + headers.chr_size);
+    chr;
     ram = Array.create ~len:0x2000 0;
   }
