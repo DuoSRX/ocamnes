@@ -44,28 +44,41 @@ let event_loop ~window ~renderer ~texture =
   let frames = ref 0.0 in
   let cycles = ref 0 in
   let do_quit = ref false in
+  let prev_f = ref cpu.ppu.f in
+  let frame = ref 0 in
 
   while not !do_quit do
     (* let log = Option.value_exn (step cpu ~trace_fun:trace) in
     logs.(cpu.steps % log_length) <- log; *)
     (* print_endline log; *)
+
+    (* if cpu.ppu.frames = 200 then Cpu.Debugger.break_on_step := true; *)
+
     let prev_cycles = cpu.cycles in
-    ignore @@ step cpu;
+    step cpu |> Option.iter ~f:print_endline;
+    (* step cpu |> ignore; *)
     let elapsed_cycles = cpu.cycles - prev_cycles in
 
-    (* if cpu.ppu.nmi then Cpu.nmi cpu; *)
-
-    for _ = 1 to elapsed_cycles do
-      Ppu.step cpu.ppu
+    for _ = 1 to elapsed_cycles * 3 do
+      Ppu.step cpu.ppu;
+      (* if cpu.ppu.registers.mask = 0x06 then Cpu.Debugger.break_on_step := true *)
+      (* let show_background ppu = ppu.registers.mask land 0x08 > 0 *)
     done;
 
-    (* Ppu.step cpu.ppu cpu.cycles; *)
+    if cpu.ppu.nmi_triggered then (
+      cpu.nmi <- true;
+      cpu.ppu.nmi_triggered <- false;
+      printf "NMI TRIGGERED YOOOOOOO";
+    );
 
     (* if cpu.ppu.new_frame then ( *)
-    if cpu.ppu.f then (
+    (* if cpu.ppu.f <> !prev_f then ( *)
+    if !frame <> cpu.ppu.frames then (
+      prev_f := cpu.ppu.f;
+      frame := cpu.ppu.frames;
       let now = Unix.gettimeofday () in
       if now >= (!last_time +. 1.0) then (
-        ignore @@ Sdl.set_window_title window (sprintf "%.1f FPS" !frames);
+        ignore @@ Sdl.set_window_title window (sprintf "%.1f FPS - %d cycles %d steps" !frames cpu.cycles cpu.steps);
         frames := 0.0;
         cycles := 0;
         last_time := now
