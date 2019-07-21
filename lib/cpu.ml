@@ -35,6 +35,7 @@ type cpu = {
   mutable cycles : int;
   mutable extra_cycles: int;
   mutable steps : int;
+  mutable nmi : bool;
 
   memory : int array;
   rom : Cartridge.rom;
@@ -339,9 +340,15 @@ let rts cpu = cpu.pc <- (pop_word cpu) + 1
 
 let rti cpu =
   plp cpu;
-  cpu.pc <- pop_word cpu
+  let addr = pop_word cpu in
+  printf "RTI %04X\n" addr;
+  cpu.pc <- addr
+  (* cpu.pc <- pop_word cpu *)
 
 let nmi cpu =
+  cpu.nmi <- false;
+  cpu.cycles <- cpu.cycles + 7;
+  cpu.interrupt <- true;
   push_word cpu cpu.pc;
   let flags = (flags_to_int cpu) lor Flags.break5 in
   push_byte cpu flags;
@@ -638,10 +645,10 @@ let execute_instruction cpu instruction =
   | TYA -> tya cpu
 
 module Debugger = struct
-  (* let breakpoints = ref (Int.Set.of_list [0xEC6D]) *)
+  (* let breakpoints = ref (Int.Set.of_list [0xE39F]) *)
   let breakpoints = ref (Int.Set.of_list [])
   let break_on_step = ref false
-  let break_after = ref 100000000
+  let break_after = ref 1000000000
 
   let rec prompt cpu =
     print_string "(DEBUG) ";
@@ -689,6 +696,9 @@ module Debugger = struct
     | "word" :: addr :: _ ->
       printf "%04X\n" (load_word cpu (Int.of_string addr));
       prompt cpu
+    | "pputrace" :: [] ->
+      printf "T:%04X V:%04X X:%04X\n" cpu.ppu.t cpu.ppu.v cpu.ppu.x;
+      prompt cpu
     | _ ->
       print_endline "Unknown command (q to quit, s to step, c to continue)";
       prompt cpu
@@ -701,6 +711,8 @@ let on_step cpu instruction opcode =
   ) else ()
 
 let step ?(trace_fun = trace) cpu =
+  if cpu.nmi then nmi cpu;
+
   let opcode = load_byte cpu cpu.pc in
   let instruction = decode_instruction cpu opcode in
   let log = if cpu.tracing then Some (trace_fun cpu instruction opcode) else None in

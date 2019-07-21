@@ -1,13 +1,13 @@
 (executable
  (name      main)
  (modules main)
- (libraries core nes tsdl)
+ (libraries core nes tsdl stdint)
  (preprocess
   (pps ppx_deriving.std)))
 
 (executable
  (name      nestest)
  (modules nestest)
- (libraries core nes)
+ (libraries core nes stdint)
  (preprocess
   (pps ppx_deriving.std)))
