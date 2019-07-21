@@ -340,10 +340,7 @@ let rts cpu = cpu.pc <- (pop_word cpu) + 1
 
 let rti cpu =
   plp cpu;
-  let addr = pop_word cpu in
-  printf "RTI %04X\n" addr;
-  cpu.pc <- addr
-  (* cpu.pc <- pop_word cpu *)
+  cpu.pc <- pop_word cpu
 
 let nmi cpu =
   cpu.nmi <- false;

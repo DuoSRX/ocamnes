@@ -23,10 +23,9 @@ module Registers = struct
     mutable mask : int;    (* $2001 *)
     mutable status : int;  (* $2002 *)
     mutable oam : int;     (* $2003 *)
-    mutable address : int; (* $2006 *)
   }
   let make () = {
-    status = 0; control = 0; mask = 0; oam = 0; address = 0;
+    status = 0; control = 0; mask = 0; oam = 0;
   }
 end
 
@@ -44,9 +43,6 @@ type ppu = {
   mutable nmi_previous : bool;
   mutable nmi_delay : int;
 
-  mutable scroll_x : int;
-  mutable scroll_y : int;
-  mutable sprite_count : int;
 
   (* Temp stuff *)
   mutable tile_data : Uint64.t;
@@ -54,6 +50,7 @@ type ppu = {
   mutable attr_table_b : int;
   mutable low_byte : int;
   mutable high_byte : int;
+  mutable sprite_count : int;
 
   (* Internal registers *)
   mutable t : int;  (* temp vram address *)
@@ -77,7 +74,7 @@ let make ~rom = {
   registers = Registers.make ();
   register = 0; new_frame = false;
   nmi_occured = false; nmi_output = false; nmi_triggered = false; nmi_previous = false; nmi_delay = 0;
-  scroll_x = 0; scroll_y = 0; sprite_count = 0;
+  sprite_count = 0;
   tile_data = Uint64.of_int 0; name_table_b = 0; attr_table_b = 0; low_byte = 0; high_byte = 0;
   frame_content = Bigarray.Array1.create Bigarray.int8_unsigned Bigarray.c_layout (256 * 240 * 3);
   palettes = Array.create ~len:32 0;
@@ -91,8 +88,7 @@ let load ppu address =
   if address < 0x2000 then
     ppu.rom.chr.(address)
   else if address < 0x3F00 then (
-    (* ppu.nametables.(address land 0x7FF) *)
-    ppu.nametables.(address land 0x3FF)
+    ppu.nametables.(address land 0x7FF)
   )
   else if address < 0x4000 then
     ppu.palettes.(address land 0x1F)
@@ -103,8 +99,7 @@ let store ppu address value =
   if address < 0x2000 then
     ppu.rom.chr.(address) <- value
   else if address < 0x3F00 then
-    (* ppu.nametables.(address land 0x07FF) <- value *)
-    ppu.nametables.(address land 0x03FF) <- value
+    ppu.nametables.(address land 0x07FF) <- value
   else if address < 0x4000 then (
     let a = address land 0x1F in
     ppu.palettes.(if a = 0x10 then 0 else a) <- value
@@ -146,10 +141,10 @@ let write_register ppu register value =
   ppu.register <- value;
   match register with
   | 0x2000 -> (* PPUCTRL *)
-    ppu.nmi_output <- (value land 0x80) = 1;
+    ppu.nmi_output <- (value land 0x80) > 0;
     ppu.registers.control <- value;
     nmi_change ppu;
-    ppu.t <- (ppu.t land 0xF3FF) lor (((value land 0x3) lsl 10) land 0xFFFF);
+    ppu.t <- (ppu.t land 0xF3FF) lor ((value land 0x3) lsl 10);
   | 0x2001 -> (* PPUMASK *)
     ppu.registers.mask <- value
   | 0x2003 -> (* OAMADDR *)
@@ -172,19 +167,14 @@ let write_register ppu register value =
       (* FIXME: 0x00FF or 0x80FF?? *)
       ppu.t <- ppu.t land 0x00FF;
       ppu.t <- ppu.t lor ((value land 0x3F) lsl 8);
-      (* ppu.registers.address <- (ppu.registers.address land 0x00FF) lor (value lsl 8) *)
     ) else (
       ppu.t <- ppu.t land 0xFF00;
       ppu.t <- ppu.t lor value;
       ppu.v <- ppu.t;
-      (* ppu.registers.address <- (ppu.registers.address land 0xFF00) lor value *)
     );
     ppu.w <- not ppu.w;
   | 0x2007 -> (* PPUDATA *)
-    (* store ppu ppu.registers.address value; *)
-    (* ppu.registers.address <- (ppu.registers.address + (address_increment ppu)) land 0x3FFF; *)
     store ppu ppu.v value;
-    (* ppu.v <- (ppu.v + address_increment ppu) land 0x3FFF; *)
     ppu.v <- (ppu.v + address_increment ppu) land 0x3FFF;
   | _ as r -> failwith @@ sprintf "Cannot write PPU Register @ %04X" r
 
@@ -219,18 +209,13 @@ let store_tile_data ppu =
     let p2 = (ppu.high_byte land 0x80) lsr 6 in
     ppu.low_byte <- (ppu.low_byte lsl 1);
     ppu.high_byte <- (ppu.low_byte lsl 1);
-    (* data := Uint32.(!data lsl 4); *)
-    (* let res = Int32.of_int_exn(a lor p1 lor p2) in
-    data := Int32.(!data lor res) *)
     data := Uint32.shift_left !data 4;
     let res = Uint32.of_int(a lor p1 lor p2) in
     data := Uint32.logor !data res
   done;
-  (* ppu.tile_data <- Int64.(ppu.tile_data lor Int64.of_int32_exn(!data)) *)
   ppu.tile_data <- Uint64.logor ppu.tile_data (Uint64.of_uint32 !data)
 
 let fetch_data ppu =
-  (* ppu.tile_data <- Int64.(ppu.tile_data lsl 4); *)
   ppu.tile_data <- Uint64.shift_left ppu.tile_data 4;
   match ppu.cycles % 8 with
   | 1 -> load_nametable ppu
@@ -239,7 +224,6 @@ let fetch_data ppu =
   | 7 -> load_high_byte ppu
   | 0 -> store_tile_data ppu
   | _ -> ()
-  (* | n -> failwith @@ sprintf "Uh oh, wrong cycle to fetch: %d" n *)
 
 let increment_x ppu =
   if ppu.v land 0x1F = 0x1F then (
@@ -269,13 +253,10 @@ let set_pixel ppu x y color =
 
 let background_pixel ppu =
   if show_background ppu then (
-    (* let tile_data = Int64.(ppu.tile_data lsr 32) |> Int32.of_int64_exn in *)
     let tile_data = Uint32.of_uint64 (Uint64.shift_right_logical ppu.tile_data 32) in
     let shift = (7 - ppu.x) * 4 in
     let data = Uint32.shift_right_logical tile_data shift in
     Uint32.to_int (Uint32.logand data (Uint32.of_int 0xF))
-    (* let data = Int32.(tile_data lsr shift) in
-    Int.of_int32_exn Int32.(data land 0xFl) *)
   ) else 0
 
 let render_pixel ppu =
@@ -286,14 +267,9 @@ let render_pixel ppu =
   let b = bg % 4 <> 0 in
   (* TODO: sprites *)
   let color = if b then bg else 0 in
-  (* let palette_address = 0x3F00 + color in *)
-  (* let palette = load ppu (palette_address) in *)
+  let palette = ppu.palettes.(color) in
+  set_pixel ppu x y (all_palettes.(palette land 0x3F))
   (* if b && bg <> 0 then printf "PALADDR %04X PAL %04X PAL3F %02X COL %04X\n" palette_address palette (palette land 0x3F) color; *)
-  (* let real_color = all_palettes.(palette land 0x3F) in *)
-  (* let real_color = all_palettes.((color land 0xFFFF) % 64) in *)
-  (* set_pixel ppu x y real_color *)
-  (* set_pixel ppu x y (all_palettes.(0) lsr (color * 8)) *)
-  set_pixel ppu x y (all_palettes.(0) lsr color)
 
 let tick ppu =
   if ppu.nmi_delay > 0 then (

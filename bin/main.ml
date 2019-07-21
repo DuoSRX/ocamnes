@@ -68,7 +68,6 @@ let event_loop ~window ~renderer ~texture =
     if cpu.ppu.nmi_triggered then (
       cpu.nmi <- true;
       cpu.ppu.nmi_triggered <- false;
-      printf "NMI TRIGGERED YOOOOOOO";
     );
 
     (* if cpu.ppu.new_frame then ( *)
