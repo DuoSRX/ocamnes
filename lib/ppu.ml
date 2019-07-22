@@ -92,17 +92,17 @@ let make ~rom = {
   cur_nametable = 0; cur_attribute = 0; cur_pattern_low = 0; cur_pattern_high = 0;
 }
 
-let rec load ppu address =
+let load ppu address =
   if address < 0x2000 then
     ppu.rom.chr.(address)
-  else if address < 0x3000 then (
-    if address < 0x2800 then (
+  else if address < 0x3300 then (
+    (* if address < 0x2800 then (
       ppu.nametables.(address land 0x3FF)
     ) else (
       ppu.nametables.(0x400 + (address land 0x3FF))
-    )
+    ) *)
     (* TODO: Move this ghetto into a mapper *)
-    (* if address < 0x2400 then (
+    if address < 0x2400 then (
       ppu.nametables.(address land 0x3FF)
     ) else if address >= 0x2800 && address < 0x2C00 then (
       ppu.nametables.(address land 0x3FF)
@@ -110,27 +110,26 @@ let rec load ppu address =
       ppu.nametables.(address - 0x2000)
     ) else (
       ppu.nametables.(address - 0x2800)
-    ) *)
+    )
   )
-  else if address < 0x3F00 then
-    load ppu (address - 0x1000)
   else if address < 0x4000 then
-    let addr = if address >= 16 && address % 4 = 0 then address - 16 else address in
-    ppu.palettes.(addr land 0x1F)
+    (* let addr = if address >= 16 && address % 4 = 0 then address - 16 else address in
+    ppu.palettes.(addr land 0x1F) *)
+    ppu.palettes.(address land 0x1F)
   else
     failwith @@ sprintf "Trying to read PPU VRAM @ %04X" address
 
-let rec store ppu address value =
+let store ppu address value =
   if address < 0x2000 then
     ppu.rom.chr.(address) <- value
-  else if address < 0x3000 then
-    if address < 0x2800 then (
+  else if address < 0x3F00 then
+    (* if address < 0x2800 then (
       ppu.nametables.(address land 0x3FF) <- value
     ) else (
       ppu.nametables.(0x400 + (address land 0x3FF)) <- value
-    )
+    ) *)
     (* TODO: Move this ghetto into a mapper *)
-    (* if address < 0x2400 then (
+    if address < 0x2400 then (
       ppu.nametables.(address land 0x3FF) <- value
     ) else if address >= 0x2800 && address < 0x2C00 then (
       ppu.nametables.(address land 0x3FF) <- value
@@ -138,12 +137,11 @@ let rec store ppu address value =
       ppu.nametables.(address - 0x2000) <- value
     ) else (
       ppu.nametables.(address - 0x2800) <- value
-    ) *)
-  else if address < 0x3F00 then
-    store ppu (address - 0x1000) value
+    )
   else if address < 0x4000 then (
-    let addr = if address >= 16 && address % 4 = 0 then address - 16 else address in
-    ppu.palettes.(addr land 0x1F) <- value;
+    (* let addr = if address >= 16 && address % 4 = 0 then address - 16 else address in
+    ppu.palettes.(addr land 0x1F) <- value; *)
+    ppu.palettes.(address land 0x1F) <- value;
   )
   else
     failwith @@ sprintf "Trying to write PPU VRAM @ %04X" address
@@ -177,7 +175,8 @@ let read_register ppu = function
   | 0x2004 -> (* OAMDATA *)
     ppu.oam.(ppu.registers.oam)
   | 0x2007 -> (* PPUDATA *)
-    let value = load ppu (ppu.v land 0x3FFF) in
+    (* let value = load ppu (ppu.v land 0x3FFF) in *)
+    let value = load ppu ppu.v in
     let value = if (ppu.v % 0x4000 < 0x3F00) then (
       let buffer = ppu.buffer in
       ppu.buffer <- value;
@@ -227,7 +226,8 @@ let write_register ppu register value =
     );
     ppu.w <- not ppu.w;
   | 0x2007 -> (* PPUDATA *)
-    store ppu (ppu.v land 0x3FFF) value;
+    (* store ppu (ppu.v land 0x3FFF) value; *)
+    store ppu ppu.v value;
     ppu.v <- (ppu.v + address_increment ppu)
   | _ as r -> failwith @@ sprintf "Cannot write PPU Register @ %04X" r
 
