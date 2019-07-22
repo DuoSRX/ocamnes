@@ -101,8 +101,7 @@ let store ppu address value =
   else if address < 0x3F00 then
     ppu.nametables.(address land 0x07FF) <- value
   else if address < 0x4000 then (
-    let a = address land 0x1F in
-    ppu.palettes.(if a = 0x10 then 0 else a) <- value
+    ppu.palettes.(address land 0x1F) <- value;
   )
   else
     failwith @@ sprintf "Trying to write PPU VRAM @ %04X" address
@@ -135,6 +134,10 @@ let read_register ppu = function
     result
   | 0x2004 -> (* OAMDATA *)
     ppu.oam.(ppu.registers.oam)
+  | 0x2007 -> (* PPUDATA *)
+    let value = load ppu ppu.v in
+    ppu.v <- (ppu.v + address_increment ppu) land 0x3FFF;
+    value
   | _ as r -> failwith @@ sprintf "Cannot read PPU Register @ %04X" r
 
 let write_register ppu register value =
@@ -187,18 +190,18 @@ let load_nametable ppu =
 
 let load_attribute_table ppu =
   let v = ppu.v in
-  let address = 0x23C0 lor (v land 0x0C00) lor ((v lsr 4) land 0x38) lor ((v lsr 2) lor 0x7) in
-  let shift = ((v lsr 4) land 0x4) land (v land 0x2) in
+  let address = 0x23C0 lor (v land 0x0C00) lor ((v lsr 4) land 0x38) lor ((v lsr 2) land 0x7) in
+  let shift = ((v lsr 4) land 0x4) lor (v land 0x2) in
   ppu.attr_table_b <- (((load ppu address) lsr shift) land 0x3) lsl 2
 
 let load_low_byte ppu =
   let y = (ppu.v lsr 12) land 0x7 in
-  let address = (background_pattern_table_address ppu) + ((ppu.name_table_b * 16) land 0xFFFF) + y in
+  let address = (background_pattern_table_address ppu) + (ppu.name_table_b * 16) + y in
   ppu.low_byte <- load ppu (address)
 
 let load_high_byte ppu =
   let y = (ppu.v lsr 12) land 0x7 in
-  let address = (background_pattern_table_address ppu) + ((ppu.name_table_b * 16) land 0xFFFF) + y in
+  let address = (background_pattern_table_address ppu) + (ppu.name_table_b * 16) + y in
   ppu.high_byte <- load ppu (address + 8)
 
 let store_tile_data ppu =
@@ -247,16 +250,19 @@ let increment_y ppu =
   )
 
 let set_pixel ppu x y color =
-  ppu.frame_content.{(y * 256 + x) * 3 + 2} <- color;
+  ppu.frame_content.{(y * 256 + x) * 3 + 0} <- color lsr 16;
   ppu.frame_content.{(y * 256 + x) * 3 + 1} <- color lsr 8;
-  ppu.frame_content.{(y * 256 + x) * 3 + 0} <- color lsr 16
+  ppu.frame_content.{(y * 256 + x) * 3 + 2} <- color
+
+let fetch_tile_data ppu =
+  Uint32.of_uint64 (Uint64.shift_right_logical ppu.tile_data 32)
 
 let background_pixel ppu =
   if show_background ppu then (
-    let tile_data = Uint32.of_uint64 (Uint64.shift_right_logical ppu.tile_data 32) in
+    let tile_data = fetch_tile_data ppu in
     let shift = (7 - ppu.x) * 4 in
     let data = Uint32.shift_right_logical tile_data shift in
-    Uint32.to_int (Uint32.logand data (Uint32.of_int 0xF))
+    (Uint32.to_int data) land 0xF
   ) else 0
 
 let render_pixel ppu =
@@ -267,9 +273,11 @@ let render_pixel ppu =
   let b = bg % 4 <> 0 in
   (* TODO: sprites *)
   let color = if b then bg else 0 in
+  (* let palette = load ppu (0x3F00 + color) in *)
   let palette = ppu.palettes.(color) in
-  set_pixel ppu x y (all_palettes.(palette land 0x3F))
-  (* if b && bg <> 0 then printf "PALADDR %04X PAL %04X PAL3F %02X COL %04X\n" palette_address palette (palette land 0x3F) color; *)
+  (* if color <> 0 then printf "%02X %02X\n" color (palette land 0x3F); *)
+  set_pixel ppu x y (all_palettes.(palette land 0x3F));
+  set_pixel ppu x y (if b then 0x666666 else 0)
 
 let tick ppu =
   if ppu.nmi_delay > 0 then (
@@ -308,10 +316,10 @@ let step ppu =
 
   let rendering_enabled = show_background ppu || show_sprites ppu in
   let pre_sl = ppu.scanline = 261 in
-	let visible_sl = ppu.scanline < 240 in
+  let visible_sl = ppu.scanline < 240 in
   let render_sl = pre_sl || visible_sl in
   let prefetch = ppu.cycles >= 321 && ppu.cycles <= 336 in
-	let visible_cy = ppu.cycles >= 1 && ppu.cycles <= 256 in
+  let visible_cy = ppu.cycles >= 1 && ppu.cycles <= 256 in
   let fetch_cy = prefetch || visible_cy in
 
   if rendering_enabled then (
