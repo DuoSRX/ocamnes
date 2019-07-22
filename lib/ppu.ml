@@ -60,6 +60,7 @@ type ppu = {
   mutable buffer : int;
   mutable sprites : sprite array;
   mutable sprite0_hit : bool;
+  mutable sprite_overflow : bool;
 
   (* Internal registers *)
   mutable t : int;  (* temp vram address *)
@@ -81,7 +82,7 @@ let make ~rom = {
   cycles = 340; scanline = 240; frames = 0;
   t = 0; v = 0; x = 0; w = true; f = false;
   registers = Registers.make ();
-  register = 0; sprite0_hit = false;
+  register = 0; sprite0_hit = false; sprite_overflow = false;
   nmi_occured = false; nmi_output = false; nmi_triggered = false; nmi_previous = false; nmi_delay = 0;
   sprite_count = 0; buffer = 0; sprites = Array.create ~len:8 {pattern=0;position=0;priority=0;index=0};
   tile_data = Uint64.zero; name_table_b = 0; attr_table_b = 0; low_byte = 0; high_byte = 0;
@@ -97,13 +98,13 @@ let load ppu address =
   if address < 0x2000 then
     ppu.rom.chr.(address)
   else if address < 0x3300 then (
-    if address < 0x2800 then (
+    (* if address < 0x2800 then (
       ppu.nametables.(address land 0x3FF)
     ) else (
       ppu.nametables.(0x400 + (address land 0x3FF))
-    )
+    ) *)
     (* TODO: Move this ghetto into a mapper *)
-    (* if address < 0x2400 then (
+    if address < 0x2400 then (
       ppu.nametables.(address land 0x3FF)
     ) else if address >= 0x2800 && address < 0x2C00 then (
       ppu.nametables.(address land 0x3FF)
@@ -111,7 +112,7 @@ let load ppu address =
       ppu.nametables.(address - 0x2000)
     ) else (
       ppu.nametables.(address - 0x2800)
-    ) *)
+    )
   )
   else if address < 0x4000 then
     (* let addr = if address >= 16 && address % 4 = 0 then address - 16 else address in
@@ -124,13 +125,13 @@ let store ppu address value =
   if address < 0x2000 then
     ppu.rom.chr.(address) <- value
   else if address < 0x3F00 then
-    if address < 0x2800 then (
+    (* if address < 0x2800 then (
       ppu.nametables.(address land 0x3FF) <- value
     ) else (
       ppu.nametables.(0x400 + (address land 0x3FF)) <- value
-    )
+    ) *)
     (* TODO: Move this ghetto into a mapper *)
-    (* if address < 0x2400 then (
+    if address < 0x2400 then (
       ppu.nametables.(address land 0x3FF) <- value
     ) else if address >= 0x2800 && address < 0x2C00 then (
       ppu.nametables.(address land 0x3FF) <- value
@@ -138,7 +139,7 @@ let store ppu address value =
       ppu.nametables.(address - 0x2000) <- value
     ) else (
       ppu.nametables.(address - 0x2800) <- value
-    ) *)
+    )
   else if address < 0x4000 then (
     (* let addr = if address >= 16 && address % 4 = 0 then address - 16 else address in
     ppu.palettes.(addr land 0x1F) <- value; *)
@@ -176,6 +177,7 @@ let read_register ppu = function
     let result = (ppu.register land 0x1F)
       lor (if ppu.nmi_occured then 0x80 else 0)
       lor (if ppu.sprite0_hit then 0x40 else 0)
+      lor (if ppu.sprite_overflow then 0x20 else 0)
     in
     ppu.nmi_occured <- false;
     nmi_change ppu;
@@ -358,9 +360,12 @@ let make_sprites ppu =
       );
       n := !n + 1
     );
-    (* TODO: Sprite overflow *)
-    ppu.sprite_count <- min 8 !n
-  done
+    ppu.sprite_count <- !n
+  done;
+  if !n > 8 then (
+    ppu.sprite_count <- 8;
+    ppu.sprite_overflow <- true
+  )
 
 let set_pixel ppu x y color =
   ppu.frame_content.{(y * 256 + x) * 3 + 0} <- color lsr 16;
@@ -406,7 +411,7 @@ let render_pixel ppu =
   | false, true  -> sprite_color lor 0x10
   | true,  true  -> (
     let sprite = ppu.sprites.(sprite_idx) in
-    if sprite.index = 0 && x < 255 then
+    if sprite.priority = 0 && x < 255 then
       ppu.sprite0_hit <- true;
     if sprite.priority = 0 then
       sprite_color lor 0x10
@@ -502,8 +507,8 @@ let step ppu =
   if pre_sl && ppu.cycles = 1 then (
     ppu.nmi_occured <- false;
     nmi_change ppu;
-    ppu.sprite0_hit <- false
-    (* TODO: overflow reset *)
+    ppu.sprite0_hit <- false;
+    ppu.sprite_overflow <- false
   );
 
   (* printf "SL:%-3d CY:%-3d\n" ppu.cycles ppu.scanline *)

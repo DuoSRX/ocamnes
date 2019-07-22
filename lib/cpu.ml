@@ -49,9 +49,9 @@ let load_byte cpu address =
     cpu.memory.(address land 0x7FF)
   else if (address lsr 13) = 1 then
     Ppu.read_register cpu.ppu (0x2000 + address % 8)
-  else if address = 0x4016 || address = 0x4017 then (
+  (* else if address = 0x4016 || address = 0x4017 then ( *)
+  else if address = 0x4016 then
     if Input.next_key () then 1 else 0
-  )
   else if address >= 0x4000 && address <= 0x4020 then
     0 (* TODO: controllers, APU...etc *)
   else if address < 0x8000 then
@@ -75,7 +75,8 @@ let store_byte cpu address value =
     Ppu.write_register cpu.ppu address value
   else if address = 0x4014 then
     dma cpu value
-  else if address = 0x4016 || address = 0x4017 then
+  (* else if address = 0x4016 || address = 0x4017 then *)
+  else if address = 0x4016 then
     Input.write value
   else if address >= 0x4000 && address <= 0x4020 then
     () (* TODO: controllers, APU...etc *)
