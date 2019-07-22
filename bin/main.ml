@@ -42,11 +42,9 @@ let sdl_try result = match result with
 let event_loop ~window ~renderer ~texture =
   let e = Sdl.Event.create () in
   let last_time = ref (Unix.gettimeofday ()) in
-  let frames = ref 0.0 in
-  let cycles = ref 0 in
+  let frame_count = ref 0 in
+  let prev_frames = ref 0 in
   let do_quit = ref false in
-  let prev_f = ref cpu.ppu.f in
-  let frame = ref 0 in
 
   while not !do_quit do
     let prev_cycles = cpu.cycles in
@@ -55,36 +53,23 @@ let event_loop ~window ~renderer ~texture =
 
     for _ = 1 to elapsed_cycles * 3 do
       Ppu.step cpu.ppu;
-      (* if cpu.ppu.registers.mask = 0x06 then Cpu.Debugger.break_on_step := true *)
     done;
 
-    (* TODO: Move this elsewhere? *)
-    if cpu.ppu.nmi_triggered then (
-      cpu.nmi <- true;
-      cpu.ppu.nmi_triggered <- false;
-    );
+    if cpu.ppu.nmi_triggered then Cpu.trigger_nmi cpu;
 
-    if !frame <> cpu.ppu.frames then (
-      prev_f := cpu.ppu.f;
-      frame := cpu.ppu.frames;
+    if !prev_frames <> cpu.ppu.frames then (
+      prev_frames := cpu.ppu.frames;
       let now = Unix.gettimeofday () in
+
       if now >= (!last_time +. 1.0) then (
-        ignore @@ Sdl.set_window_title window (sprintf "%.1f FPS - %d cycles %d steps" !frames cpu.cycles cpu.steps);
-        frames := 0.0;
-        cycles := 0;
+        ignore @@ Sdl.set_window_title window (sprintf "%d FPS - %d steps" !frame_count cpu.steps);
+        frame_count := 0;
         last_time := now
       ) else (
-        frames := !frames +. 1.0;
-        cycles := cpu.cycles - !cycles
+        frame_count := !frame_count + 1;
       );
 
-      cpu.ppu.new_frame <- false;
-
-      (* Is this really worse than lock texture?? *)
-      (* let (pixels, _pitch) = sdl_try @@ Sdl.lock_texture texture None Bigarray.int8_unsigned in
-      Bigarray.Array1.blit cpu.ppu.frame_content pixels; *)
       Sdl.update_texture texture None cpu.ppu.frame_content (256 * 3) |> sdl_try;
-      (* Sdl.unlock_texture texture; *)
       Sdl.render_clear renderer |> sdl_try;
       Sdl.render_copy renderer texture |> sdl_try;
       Sdl.render_present renderer;
@@ -96,15 +81,11 @@ let event_loop ~window ~renderer ~texture =
           | `Quit -> do_quit := true
           | `Key_down when key_scancode e = `Escape -> do_quit := true
           | `Key_down when key_scancode e = `Space -> Cpu.Debugger.break_on_step := true
-          | `Key_down when key_scancode e = `V ->
-            Cpu.Debugger.break_on_step := true;
-            printf "%04X" cpu.ppu.oam.(31);
           | `Key_up -> update_input ~down:false (key_scancode e)
           | `Key_down -> update_input ~down:true (key_scancode e)
           | _ -> ()
       done;
     );
-    (* Sdl.start_text_input(); *)
   done
 
 let main () =

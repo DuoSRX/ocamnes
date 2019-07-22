@@ -344,6 +344,10 @@ let rti cpu =
   plp cpu;
   cpu.pc <- pop_word cpu
 
+let trigger_nmi cpu =
+  cpu.nmi <- true;
+  cpu.ppu.nmi_triggered <- false
+
 let nmi cpu =
   cpu.nmi <- false;
   cpu.cycles <- cpu.cycles + 7;
