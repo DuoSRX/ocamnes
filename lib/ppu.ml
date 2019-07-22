@@ -41,7 +41,6 @@ type ppu = {
   mutable scanline : int;
   mutable frames : int;
   mutable register : int;
-  mutable new_frame : bool;
 
   (* https://wiki.nesdev.com/w/index.php/NMI *)
   mutable nmi_occured : bool;
@@ -87,7 +86,7 @@ let make ~rom = {
   cycles = 340; scanline = 240; frames = 0;
   t = 0; v = 0; x = 0; w = true; f = false;
   registers = Registers.make ();
-  register = 0; new_frame = false;
+  register = 0;
   nmi_occured = false; nmi_output = false; nmi_triggered = false; nmi_previous = false; nmi_delay = 0;
   sprite_count = 0; buffer = 0; sprites = Array.create ~len:8 {pattern=0;position=0;priority=0;index=0};
   tile_data = Uint64.zero; name_table_b = 0; attr_table_b = 0; low_byte = 0; high_byte = 0;
@@ -314,6 +313,7 @@ let increment_y ppu =
 
 let sprite_pattern ppu ~tile ~row ~attrs =
   let vflip = attrs land 0x80 > 0 in
+  let hflip = attrs land 0x40 > 0 in
   let index = if vflip then 7 - row else row in
   let address = sprite_address ppu + tile * 16 + index in
   let lo = ref @@ load ppu address in
@@ -321,12 +321,22 @@ let sprite_pattern ppu ~tile ~row ~attrs =
   let palette = (attrs land 3) lsl 2 in
   let pattern = ref 0 in
   for _ = 1 to 8 do
-    let plane0 = (!lo land 0x80) lsr 7 in
-    let plane1 = (!hi land 0x80) lsr 6 in
-    lo := !lo lsl 1;
-    hi := !hi lsl 1;
-    pattern := !pattern lsl 4;
-    pattern := !pattern lor (palette lor plane0 lor plane1)
+    (* TODO: Remove duplication here *)
+    if hflip then (
+      let plane0 = (!lo land 0x1) in
+      let plane1 = (!hi land 0x1) lsl 1 in
+      lo := !lo lsr 1;
+      hi := !hi lsr 1;
+      pattern := !pattern lsl 4;
+      pattern := !pattern lor (palette lor plane0 lor plane1)
+    ) else (
+      let plane0 = (!lo land 0x80) lsr 7 in
+      let plane1 = (!hi land 0x80) lsr 6 in
+      lo := !lo lsl 1;
+      hi := !hi lsl 1;
+      pattern := !pattern lsl 4;
+      pattern := !pattern lor (palette lor plane0 lor plane1)
+    )
   done;
   !pattern
 
@@ -347,7 +357,7 @@ let make_sprites ppu =
         let index = !n in (* FIXME should this be taken from the OAM instead? *)
         let pattern = sprite_pattern ppu ~tile ~row ~attrs in
 
-        ppu.sprites.(!n) <- { position; priority; index; pattern } (* FIXME don't allocate new sprite *)
+        ppu.sprites.(!n) <- { position; priority; index; pattern } (* FIXME don't allocate new sprites *)
       );
       n := !n + 1
     );
@@ -359,9 +369,6 @@ let set_pixel ppu x y color =
   ppu.frame_content.{(y * 256 + x) * 3 + 0} <- color lsr 16;
   ppu.frame_content.{(y * 256 + x) * 3 + 1} <- color lsr 8;
   ppu.frame_content.{(y * 256 + x) * 3 + 2} <- color
-
-let fetch_tile_data ppu =
-  Uint64.shift_right_logical ppu.tile_data 32 |> Uint64.to_int
 
 let sprite_pixel ppu =
   let pixel = ref (0, 0) in
@@ -379,7 +386,7 @@ let sprite_pixel ppu =
 
 let background_pixel ppu =
   if show_background ppu then (
-    let tile_data = fetch_tile_data ppu in
+    let tile_data = Uint64.shift_right_logical ppu.tile_data 32 |> Uint64.to_int in
     let shift = (7 - ppu.x) * 4 in
     let data = tile_data lsr shift in
     data land 0xF
