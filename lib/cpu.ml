@@ -66,7 +66,7 @@ let dma cpu address =
   for x = 0 to 255 do
     Ppu.write_register cpu.ppu 0x2004 (load_byte cpu (page + x))
   done;
-  cpu.extra_cycles <- cpu.extra_cycles + 514
+  cpu.extra_cycles <- cpu.extra_cycles + 513 + Bool.to_int (cpu.cycles % 2 = 1)
 
 let store_byte cpu address value =
   if address < 0x2000 then
