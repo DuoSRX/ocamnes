@@ -10,11 +10,17 @@ let logs = Array.create ~len:log_length ""
 let term = ref false
 
 let memory = Array.create ~len:0x800 0
+(* let rom = load_rom "./roms/ppu/palette_ram.nes" *)
+(* let rom = load_rom "./roms/instr_test-v5/rom_singles/03-immediate.nes" *)
+(* let rom = load_rom "./roms/instr_test-v5/rom_singles/02-implied.nes" *)
 (* let rom = load_rom "./roms/instr_test-v5/rom_singles/01-basics.nes" *)
+(* let rom = load_rom "./roms/nestress.nes" *)
 (* let rom = load_rom "./roms/nestest.nes" *)
 (* let rom = load_rom "./roms/color_test.nes" *)
+(* let rom = load_rom "./roms/donkey.nes" *)
+(* let rom = load_rom "./roms/mario.nes" *)
 (* let rom = load_rom "./roms/ice_climber.nes" *)
-let rom = load_rom "./roms/donkey.nes"
+let rom = load_rom "./roms/balloon_fight.nes"
 
 let cpu = {
   rom = rom; ppu = Ppu.make ~rom; cycles = 0;
