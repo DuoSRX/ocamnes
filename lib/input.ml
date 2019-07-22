@@ -31,9 +31,17 @@ let check_key = function
 | 7 -> controller_state.right
 | _ -> false
 
+let strobe = ref 0
 let input_state = ref 0
 
 let next_key () =
   let key = !input_state in
   input_state := (!input_state + 1) mod 8;
+  if !strobe land 1 = 1 then
+    input_state := 0;
   check_key key
+
+let write value =
+  strobe := value;
+  if value land 1 = 1 then
+    input_state := 0
