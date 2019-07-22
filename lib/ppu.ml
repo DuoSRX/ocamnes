@@ -51,6 +51,7 @@ type ppu = {
   mutable low_byte : int;
   mutable high_byte : int;
   mutable sprite_count : int;
+  mutable buffer : int;
 
   (* More temp stuff *)
   cur_nametable : int;
@@ -80,7 +81,7 @@ let make ~rom = {
   registers = Registers.make ();
   register = 0; new_frame = false;
   nmi_occured = false; nmi_output = false; nmi_triggered = false; nmi_previous = false; nmi_delay = 0;
-  sprite_count = 0;
+  sprite_count = 0; buffer = 0;
   tile_data = Uint64.zero; name_table_b = 0; attr_table_b = 0; low_byte = 0; high_byte = 0;
   frame_content = Bigarray.Array1.create Bigarray.int8_unsigned Bigarray.c_layout (256 * 240 * 3);
   palettes = Array.create ~len:32 0;
@@ -95,14 +96,25 @@ let load ppu address =
   if address < 0x2000 then
     ppu.rom.chr.(address)
   else if address < 0x3F00 then (
-    if address < 0x2800 then (
+    (* if address < 0x2800 then (
       ppu.nametables.(address land 0x3FF)
     ) else (
       ppu.nametables.(0x400 + (address land 0x3FF))
+    ) *)
+    (* TODO: Move this ghetto into a mapper *)
+    if address < 0x2400 then (
+      ppu.nametables.(address land 0x3FF)
+    ) else if address >= 0x2800 && address < 0x2C00 then (
+      ppu.nametables.(address land 0x3FF)
+    ) else if address >= 0x2400 && address < 0x2800 then (
+      ppu.nametables.(address - 0x2000)
+    ) else (
+      ppu.nametables.(address - 0x2800)
     )
   )
   else if address < 0x4000 then
-    ppu.palettes.(address land 0x1F)
+    let addr = if address >= 16 && address % 4 = 0 then address - 16 else address in
+    ppu.palettes.(addr land 0x1F)
   else
     failwith @@ sprintf "Trying to read PPU VRAM @ %04X" address
 
@@ -110,13 +122,24 @@ let store ppu address value =
   if address < 0x2000 then
     ppu.rom.chr.(address) <- value
   else if address < 0x3F00 then
-    if address < 0x2800 then (
+    (* if address < 0x2800 then (
       ppu.nametables.(address land 0x3FF) <- value
     ) else (
       ppu.nametables.(0x400 + (address land 0x3FF)) <- value
+    ) *)
+    (* TODO: Move this ghetto into a mapper *)
+    if address < 0x2400 then (
+      ppu.nametables.(address land 0x3FF) <- value
+    ) else if address >= 0x2800 && address < 0x2C00 then (
+      ppu.nametables.(address land 0x3FF) <- value
+    ) else if address >= 0x2400 && address < 0x2800 then (
+      ppu.nametables.(address - 0x2000) <- value
+    ) else (
+      ppu.nametables.(address - 0x2800) <- value
     )
   else if address < 0x4000 then (
-    ppu.palettes.(address land 0x1F) <- value;
+    let addr = if address >= 16 && address % 4 = 0 then address - 16 else address in
+    ppu.palettes.(addr land 0x1F) <- value;
   )
   else
     failwith @@ sprintf "Trying to write PPU VRAM @ %04X" address
@@ -150,10 +173,17 @@ let read_register ppu = function
   | 0x2004 -> (* OAMDATA *)
     ppu.oam.(ppu.registers.oam)
   | 0x2007 -> (* PPUDATA *)
-    0
-    (* let value = load ppu ppu.v in
+    let value = load ppu ppu.v in
+    let value = if (ppu.v % 0x4000 < 0x3F00) then (
+      let buffer = ppu.buffer in
+      ppu.buffer <- value;
+      buffer
+    ) else (
+      ppu.buffer <- load ppu (ppu.v - 0x1000);
+      value
+    ) in
     ppu.v <- (ppu.v + address_increment ppu);
-    value *)
+    value
   | _ as r -> failwith @@ sprintf "Cannot read PPU Register @ %04X" r
 
 let write_register ppu register value =
