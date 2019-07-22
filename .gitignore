@@ -3,3 +3,4 @@ bin/.merlin
 .merlin-old
 .DS_Store
 .merlin
+roms/
