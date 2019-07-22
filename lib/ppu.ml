@@ -59,7 +59,7 @@ type ppu = {
   mutable high_byte : int;
   mutable sprite_count : int;
   mutable buffer : int;
-  mutable sprites : (sprite option) array;
+  mutable sprites : sprite array;
 
   (* More temp stuff *)
   cur_nametable : int;
@@ -89,7 +89,7 @@ let make ~rom = {
   registers = Registers.make ();
   register = 0; new_frame = false;
   nmi_occured = false; nmi_output = false; nmi_triggered = false; nmi_previous = false; nmi_delay = 0;
-  sprite_count = 0; buffer = 0; sprites = Array.create ~len:8 None;
+  sprite_count = 0; buffer = 0; sprites = Array.create ~len:8 {pattern=0;position=0;priority=0;index=0};
   tile_data = Uint64.zero; name_table_b = 0; attr_table_b = 0; low_byte = 0; high_byte = 0;
   frame_content = Bigarray.Array1.create Bigarray.int8_unsigned Bigarray.c_layout (256 * 240 * 3);
   palettes = Array.create ~len:32 0;
@@ -312,34 +312,6 @@ let increment_y ppu =
     ppu.v <- (ppu.v land (lnot 0x03E0)) lor (y lsl 5)
   )
 
-let set_pixel ppu x y color =
-  ppu.frame_content.{(y * 256 + x) * 3 + 0} <- color lsr 16;
-  ppu.frame_content.{(y * 256 + x) * 3 + 1} <- color lsr 8;
-  ppu.frame_content.{(y * 256 + x) * 3 + 2} <- color
-
-let fetch_tile_data ppu =
-  Uint64.shift_right_logical ppu.tile_data 32 |> Uint64.to_int
-
-let background_pixel ppu =
-  if show_background ppu then (
-    let tile_data = fetch_tile_data ppu in
-    let shift = (7 - ppu.x) * 4 in
-    let data = tile_data lsr shift in
-    data land 0xF
-  ) else 0
-
-let render_pixel ppu =
-  let x = ppu.cycles - 1 in
-  let y = ppu.scanline in
-  let bg = background_pixel ppu in
-  (* TODO: x < 8 and y < 8 *)
-  let b = bg % 4 <> 0 in
-  (* TODO: sprites *)
-  let color = if b then bg else 0 in
-  (* let palette = load ppu (0x3F00 + color) in *)
-  let palette = ppu.palettes.(color) in
-  set_pixel ppu x y (all_palettes.(palette land 0x3F))
-
 let sprite_pattern ppu ~tile ~row ~attrs =
   let vflip = attrs land 0x80 > 0 in
   let index = if vflip then 7 - row else row in
@@ -375,13 +347,64 @@ let make_sprites ppu =
         let index = !n in (* FIXME should this be taken from the OAM instead? *)
         let pattern = sprite_pattern ppu ~tile ~row ~attrs in
 
-        ppu.sprites.(!n) <- Some { position; priority; index; pattern }
+        ppu.sprites.(!n) <- { position; priority; index; pattern } (* FIXME don't allocate new sprite *)
       );
       n := !n + 1
     );
     (* TODO: Sprite overflow *)
     ppu.sprite_count <- min 8 !n
   done
+
+let set_pixel ppu x y color =
+  ppu.frame_content.{(y * 256 + x) * 3 + 0} <- color lsr 16;
+  ppu.frame_content.{(y * 256 + x) * 3 + 1} <- color lsr 8;
+  ppu.frame_content.{(y * 256 + x) * 3 + 2} <- color
+
+let fetch_tile_data ppu =
+  Uint64.shift_right_logical ppu.tile_data 32 |> Uint64.to_int
+
+let sprite_pixel ppu =
+  let pixel = ref (0, 0) in
+  for n = 0 to ppu.sprite_count - 1 do
+    let sprite = ppu.sprites.(n) in
+    let offset = (ppu.cycles - 1) - sprite.position in
+    if not (offset < 0 || offset > 7) then (
+      let offset = 7 - offset in
+      let color = (sprite.pattern lsr (offset * 4)) land 0xF in
+      if not (color % 4 = 0) then
+        pixel := n, color
+    );
+  done;
+  !pixel
+
+let background_pixel ppu =
+  if show_background ppu then (
+    let tile_data = fetch_tile_data ppu in
+    let shift = (7 - ppu.x) * 4 in
+    let data = tile_data lsr shift in
+    data land 0xF
+  ) else 0
+
+let render_pixel ppu =
+  let x = ppu.cycles - 1 in
+  let y = ppu.scanline in
+  let bg = background_pixel ppu in
+  let _sprite_idx, sprite = sprite_pixel ppu in
+  (* TODO: x < 8 and y < 8 *)
+  let b = bg % 4 <> 0 in
+  let s = sprite % 4 <> 0 in
+
+  let color = match (b, s) with
+  | false, false -> 0
+  | true,  false -> bg
+  | false, true  -> sprite lor 0x10
+  | true,  true  -> sprite lor 0x10 (* FIXME: priority stuff *)
+  in
+
+  (* let color = if b then bg else 0 in *)
+  (* let palette = load ppu (0x3F00 + color) in *)
+  let palette = ppu.palettes.(color) in
+  set_pixel ppu x y (all_palettes.(palette land 0x3F))
 
 let tick ppu =
   if ppu.nmi_delay > 0 then (
