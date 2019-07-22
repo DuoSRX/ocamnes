@@ -62,7 +62,6 @@ let event_loop ~window ~renderer ~texture =
     for _ = 1 to elapsed_cycles * 3 do
       Ppu.step cpu.ppu;
       (* if cpu.ppu.registers.mask = 0x06 then Cpu.Debugger.break_on_step := true *)
-      (* let show_background ppu = ppu.registers.mask land 0x08 > 0 *)
     done;
 
     if cpu.ppu.nmi_triggered then (
@@ -70,8 +69,6 @@ let event_loop ~window ~renderer ~texture =
       cpu.ppu.nmi_triggered <- false;
     );
 
-    (* if cpu.ppu.new_frame then ( *)
-    (* if cpu.ppu.f <> !prev_f then ( *)
     if !frame <> cpu.ppu.frames then (
       prev_f := cpu.ppu.f;
       frame := cpu.ppu.frames;
@@ -89,10 +86,10 @@ let event_loop ~window ~renderer ~texture =
       cpu.ppu.new_frame <- false;
 
       (* Is this really worse than lock texture?? *)
-      (* Sdl.update_texture texture None cpu.ppu.frame_content (256 * 3) |> sdl_try; *)
-      let (pixels, _pitch) = sdl_try @@ Sdl.lock_texture texture None Bigarray.int8_unsigned in
-      Bigarray.Array1.blit cpu.ppu.frame_content pixels;
-      Sdl.unlock_texture texture;
+      (* let (pixels, _pitch) = sdl_try @@ Sdl.lock_texture texture None Bigarray.int8_unsigned in
+      Bigarray.Array1.blit cpu.ppu.frame_content pixels; *)
+      Sdl.update_texture texture None cpu.ppu.frame_content (256 * 3) |> sdl_try;
+      (* Sdl.unlock_texture texture; *)
       Sdl.render_clear renderer |> sdl_try;
       Sdl.render_copy renderer texture |> sdl_try;
       Sdl.render_present renderer;
@@ -122,7 +119,7 @@ let main () =
   Sdl.log "SDL Loaded";
 
   let flags = Sdl.Window.(shown + opengl) in
-  let window = sdl_try @@ Sdl.create_window ~w:512 ~h:480 "Ocamnes" flags in
+  let window = sdl_try @@ Sdl.create_window ~w:1024 ~h:960 "Ocamnes" flags in
   let renderer = sdl_try @@ Sdl.create_renderer window ~flags:(Sdl.Renderer.accelerated) in
   let texture = sdl_try @@ Sdl.create_texture renderer Sdl.Pixel.format_rgb24 Sdl.Texture.access_streaming ~w:256 ~h:240 in
   event_loop ~window ~renderer ~texture;

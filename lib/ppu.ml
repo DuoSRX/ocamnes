@@ -52,6 +52,12 @@ type ppu = {
   mutable high_byte : int;
   mutable sprite_count : int;
 
+  (* More temp stuff *)
+  cur_nametable : int;
+  cur_attribute : int;
+  cur_pattern_low : int;
+  cur_pattern_high : int;
+
   (* Internal registers *)
   mutable t : int;  (* temp vram address *)
   mutable v : int;  (* vram address *)
@@ -75,20 +81,25 @@ let make ~rom = {
   register = 0; new_frame = false;
   nmi_occured = false; nmi_output = false; nmi_triggered = false; nmi_previous = false; nmi_delay = 0;
   sprite_count = 0;
-  tile_data = Uint64.of_int 0; name_table_b = 0; attr_table_b = 0; low_byte = 0; high_byte = 0;
+  tile_data = Uint64.zero; name_table_b = 0; attr_table_b = 0; low_byte = 0; high_byte = 0;
   frame_content = Bigarray.Array1.create Bigarray.int8_unsigned Bigarray.c_layout (256 * 240 * 3);
   palettes = Array.create ~len:32 0;
   vram = Array.create ~len:0x800 0;
   oam = Array.create ~len:0x100 0;
-  nametables = Array.create ~len:0x1000 0;
+  nametables = Array.create ~len:0x800 0;
   rom;
+  cur_nametable = 0; cur_attribute = 0; cur_pattern_low = 0; cur_pattern_high = 0;
 }
 
 let load ppu address =
   if address < 0x2000 then
     ppu.rom.chr.(address)
   else if address < 0x3F00 then (
-    ppu.nametables.(address land 0x7FF)
+    if address < 0x2800 then (
+      ppu.nametables.(address land 0x3FF)
+    ) else (
+      ppu.nametables.(0x400 + (address land 0x3FF))
+    )
   )
   else if address < 0x4000 then
     ppu.palettes.(address land 0x1F)
@@ -99,7 +110,11 @@ let store ppu address value =
   if address < 0x2000 then
     ppu.rom.chr.(address) <- value
   else if address < 0x3F00 then
-    ppu.nametables.(address land 0x07FF) <- value
+    if address < 0x2800 then (
+      ppu.nametables.(address land 0x3FF) <- value
+    ) else (
+      ppu.nametables.(0x400 + (address land 0x3FF)) <- value
+    )
   else if address < 0x4000 then (
     ppu.palettes.(address land 0x1F) <- value;
   )
@@ -109,7 +124,7 @@ let store ppu address value =
 let nmi_change ppu =
   let nmi = ppu.nmi_output && ppu.nmi_occured in
 	if nmi && not ppu.nmi_previous then
-		ppu.nmi_delay <- 15;
+		ppu.nmi_delay <- 10;
 	ppu.nmi_previous <- nmi
 
 let address_increment ppu =
@@ -135,9 +150,10 @@ let read_register ppu = function
   | 0x2004 -> (* OAMDATA *)
     ppu.oam.(ppu.registers.oam)
   | 0x2007 -> (* PPUDATA *)
-    let value = load ppu ppu.v in
-    ppu.v <- (ppu.v + address_increment ppu) land 0x3FFF;
-    value
+    0
+    (* let value = load ppu ppu.v in
+    ppu.v <- (ppu.v + address_increment ppu);
+    value *)
   | _ as r -> failwith @@ sprintf "Cannot read PPU Register @ %04X" r
 
 let write_register ppu register value =
@@ -158,17 +174,17 @@ let write_register ppu register value =
     ppu.registers.oam <- (address + 1) % 0x100
   | 0x2005 -> (* PPUSCROLL *)
     if ppu.w then (
-      ppu.t <- (ppu.t land 0xFFE0) land (value lsr 3);
+      ppu.t <- (ppu.t land 0xFFE0) lor (value lsr 3);
       ppu.x <- value land 0x7;
     ) else (
-      ppu.t <- (ppu.t land 0x8FFF) lor (((value land 0x07) lsl 12) land 0xFFFF);
-      ppu.t <- (ppu.t land 0xFC1F) lor (((value land 0xF8) lsl 2) land 0xFFFF);
+      ppu.t <- (ppu.t land 0x8FFF) lor ((value land 0x07) lsl 12);
+      ppu.t <- (ppu.t land 0xFC1F) lor ((value land 0xF8) lsl 2);
     );
     ppu.w <- not ppu.w;
   | 0x2006 -> (* PPUADDR *)
     if ppu.w then (
       (* FIXME: 0x00FF or 0x80FF?? *)
-      ppu.t <- ppu.t land 0x00FF;
+      ppu.t <- ppu.t land 0x80FF;
       ppu.t <- ppu.t lor ((value land 0x3F) lsl 8);
     ) else (
       ppu.t <- ppu.t land 0xFF00;
@@ -178,7 +194,7 @@ let write_register ppu register value =
     ppu.w <- not ppu.w;
   | 0x2007 -> (* PPUDATA *)
     store ppu ppu.v value;
-    ppu.v <- (ppu.v + address_increment ppu) land 0x3FFF;
+    ppu.v <- (ppu.v + address_increment ppu)
   | _ as r -> failwith @@ sprintf "Cannot write PPU Register @ %04X" r
 
 let show_sprites ppu = ppu.registers.mask land 0x10 > 0
@@ -205,18 +221,18 @@ let load_high_byte ppu =
   ppu.high_byte <- load ppu (address + 8)
 
 let store_tile_data ppu =
-  let data = ref (Uint32.of_int 0) in
-  for _n = 0 to 7 do
+  let data = ref 0 in
+  for _n = 1 to 8 do
     let a = ppu.attr_table_b in
     let p1 = (ppu.low_byte land 0x80) lsr 7 in
     let p2 = (ppu.high_byte land 0x80) lsr 6 in
     ppu.low_byte <- (ppu.low_byte lsl 1);
-    ppu.high_byte <- (ppu.low_byte lsl 1);
-    data := Uint32.shift_left !data 4;
-    let res = Uint32.of_int(a lor p1 lor p2) in
-    data := Uint32.logor !data res
+    ppu.high_byte <- (ppu.high_byte lsl 1);
+    data := !data lsl 4;
+    let res = a lor p1 lor p2 in
+    data := !data lor res;
   done;
-  ppu.tile_data <- Uint64.logor ppu.tile_data (Uint64.of_uint32 !data)
+  ppu.tile_data <- Uint64.logor ppu.tile_data (Uint64.of_int !data)
 
 let fetch_data ppu =
   ppu.tile_data <- Uint64.shift_left ppu.tile_data 4;
@@ -255,14 +271,14 @@ let set_pixel ppu x y color =
   ppu.frame_content.{(y * 256 + x) * 3 + 2} <- color
 
 let fetch_tile_data ppu =
-  Uint32.of_uint64 (Uint64.shift_right_logical ppu.tile_data 32)
+  Uint64.shift_right_logical ppu.tile_data 32 |> Uint64.to_int
 
 let background_pixel ppu =
   if show_background ppu then (
     let tile_data = fetch_tile_data ppu in
     let shift = (7 - ppu.x) * 4 in
-    let data = Uint32.shift_right_logical tile_data shift in
-    (Uint32.to_int data) land 0xF
+    let data = tile_data lsr shift in
+    data land 0xF
   ) else 0
 
 let render_pixel ppu =
@@ -275,9 +291,7 @@ let render_pixel ppu =
   let color = if b then bg else 0 in
   (* let palette = load ppu (0x3F00 + color) in *)
   let palette = ppu.palettes.(color) in
-  (* if color <> 0 then printf "%02X %02X\n" color (palette land 0x3F); *)
-  set_pixel ppu x y (all_palettes.(palette land 0x3F));
-  set_pixel ppu x y (if b then 0x666666 else 0)
+  set_pixel ppu x y (all_palettes.(palette land 0x3F))
 
 let tick ppu =
   if ppu.nmi_delay > 0 then (
