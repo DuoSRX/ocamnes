@@ -20,7 +20,8 @@ let cpu = {
   rom = rom; ppu = Ppu.make ~rom; cycles = 0;
   a = 0; x = 0; y = 0; memory; s = 0xFD; pc = 0; extra_cycles = 0;
   zero = false; negative = false; carry = false; decimal = false; interrupt = true; overflow = false;
-  nestest = false; tracing = false; steps = -1;
+  nestest = false; steps = -1; nmi = false;
+  tracing = false;
 }
 
 let update_input keycode ~down = match keycode with
