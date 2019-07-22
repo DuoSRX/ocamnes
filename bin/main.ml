@@ -96,6 +96,7 @@ let event_loop ~window ~renderer ~texture =
       Sdl.render_clear renderer |> sdl_try;
       Sdl.render_copy renderer texture |> sdl_try;
       Sdl.render_present renderer;
+      Out_channel.flush stdout;
 
       let key_scancode e = Sdl.Scancode.enum Sdl.Event.(get e keyboard_scancode) in
       while Sdl.poll_event (Some e) do
