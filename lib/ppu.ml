@@ -29,6 +29,13 @@ module Registers = struct
   }
 end
 
+type sprite = {
+  pattern : int;
+  position : int;
+  priority : int;
+  index : int;
+}
+
 type ppu = {
   mutable cycles : int;
   mutable scanline : int;
@@ -52,6 +59,7 @@ type ppu = {
   mutable high_byte : int;
   mutable sprite_count : int;
   mutable buffer : int;
+  mutable sprites : (sprite option) array;
 
   (* More temp stuff *)
   cur_nametable : int;
@@ -81,7 +89,7 @@ let make ~rom = {
   registers = Registers.make ();
   register = 0; new_frame = false;
   nmi_occured = false; nmi_output = false; nmi_triggered = false; nmi_previous = false; nmi_delay = 0;
-  sprite_count = 0; buffer = 0;
+  sprite_count = 0; buffer = 0; sprites = Array.create ~len:8 None;
   tile_data = Uint64.zero; name_table_b = 0; attr_table_b = 0; low_byte = 0; high_byte = 0;
   frame_content = Bigarray.Array1.create Bigarray.int8_unsigned Bigarray.c_layout (256 * 240 * 3);
   palettes = Array.create ~len:32 0;
@@ -159,6 +167,11 @@ let address_increment ppu =
 
 let background_pattern_table_address ppu =
   match ppu.registers.control land 0x10 with
+  | 0 -> 0
+  | _ -> 0x1000
+
+let sprite_address ppu =
+  match ppu.registers.control land 0x08 with
   | 0 -> 0
   | _ -> 0x1000
 
@@ -327,6 +340,49 @@ let render_pixel ppu =
   let palette = ppu.palettes.(color) in
   set_pixel ppu x y (all_palettes.(palette land 0x3F))
 
+let sprite_pattern ppu ~tile ~row ~attrs =
+  let vflip = attrs land 0x80 > 0 in
+  let index = if vflip then 7 - row else row in
+  let address = sprite_address ppu + tile * 16 + index in
+  let lo = ref @@ load ppu address in
+  let hi = ref @@ load ppu (address + 8) in
+  let palette = (attrs land 3) lsl 2 in
+  let pattern = ref 0 in
+  for _ = 1 to 8 do
+    let plane0 = (!lo land 0x80) lsr 7 in
+    let plane1 = (!hi land 0x80) lsr 6 in
+    lo := !lo lsl 1;
+    hi := !hi lsl 1;
+    pattern := !pattern lsl 4;
+    pattern := !pattern lor (palette lor plane0 lor plane1)
+  done;
+  !pattern
+
+let make_sprites ppu =
+  let height = 8 in (* TODO: 16px sprites 8 *)
+  let n = ref 0 in
+  for i = 0 to 63 do
+    let y = ppu.oam.(i * 4) in
+    let x = ppu.oam.(i * 4 + 3) in
+    let attrs = ppu.oam.(i * 4 + 2) in
+    let tile = ppu.oam.(i * 4 + 1) in
+    (* let idx = ppu.oam.(i * 4 + 1) in *)
+    let row = ppu.scanline - y in
+    if row < 0 || row >= height then () else (
+      if !n < 8 then (
+        let position = x in
+        let priority = (attrs lsr 5) land 1 in
+        let index = !n in (* FIXME should this be taken from the OAM instead? *)
+        let pattern = sprite_pattern ppu ~tile ~row ~attrs in
+
+        ppu.sprites.(!n) <- Some { position; priority; index; pattern }
+      );
+      n := !n + 1
+    );
+    (* TODO: Sprite overflow *)
+    ppu.sprite_count <- min 8 !n
+  done
+
 let tick ppu =
   if ppu.nmi_delay > 0 then (
     ppu.nmi_delay <- ppu.nmi_delay - 1;
@@ -394,9 +450,9 @@ let step ppu =
 
     if ppu.cycles = 257 then (
       if visible_sl then (
-        () (* TODO: eval sprites *)
+        make_sprites ppu
       ) else (
-        () (* TODO: update sprite count *)
+        ppu.sprite_count <- 0
       )
     )
   );
