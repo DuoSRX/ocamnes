@@ -48,15 +48,8 @@ let event_loop ~window ~renderer ~texture =
   let frame = ref 0 in
 
   while not !do_quit do
-    (* let log = Option.value_exn (step cpu ~trace_fun:trace) in
-    logs.(cpu.steps % log_length) <- log; *)
-    (* print_endline log; *)
-
-    (* if cpu.ppu.frames = 200 then Cpu.Debugger.break_on_step := true; *)
-
     let prev_cycles = cpu.cycles in
     step cpu |> Option.iter ~f:print_endline;
-    (* step cpu |> ignore; *)
     let elapsed_cycles = cpu.cycles - prev_cycles in
 
     for _ = 1 to elapsed_cycles * 3 do
@@ -64,6 +57,7 @@ let event_loop ~window ~renderer ~texture =
       (* if cpu.ppu.registers.mask = 0x06 then Cpu.Debugger.break_on_step := true *)
     done;
 
+    (* TODO: Move this elsewhere? *)
     if cpu.ppu.nmi_triggered then (
       cpu.nmi <- true;
       cpu.ppu.nmi_triggered <- false;
