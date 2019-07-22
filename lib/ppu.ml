@@ -405,10 +405,13 @@ let render_pixel ppu =
   | true,  false -> bg_color
   | false, true  -> sprite_color lor 0x10
   | true,  true  -> (
-    (* FIXME: priority stuff *)
-    if ppu.sprites.(sprite_idx).priority = 0 && x < 255 then
+    let sprite = ppu.sprites.(sprite_idx) in
+    if sprite.index = 0 && x < 255 then
       ppu.sprite0_hit <- true;
-    sprite_color lor 0x10
+    if sprite.priority = 0 then
+      sprite_color lor 0x10
+    else
+      bg_color
   )
   in
 
