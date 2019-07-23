@@ -228,12 +228,11 @@ let ldy c args = c.y <- set_nz_flags c args
 
 let jmp cpu target = cpu.pc <- target
 
-let brk _ = failwith "oh no BRK"
-(* let brk cpu =
-  push_word cpu (cpu.pc + 2);
-  push_byte cpu @@ (flags_to_int cpu) lor Flags.b;
+let brk cpu =
+  push_word cpu (cpu.pc + 1);
+  push_byte cpu @@ (flags_to_int cpu) lor Flags.break4;
   cpu.interrupt <- true;
-  cpu.pc <- load_word cpu 0xFFEE *)
+  cpu.pc <- load_word cpu 0xFFFE
 
 let branch cpu addr cond =
   if cond then
