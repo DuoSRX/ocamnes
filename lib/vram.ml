@@ -25,7 +25,7 @@ let mirror mode address =
 
 let load v address =
   if address < 0x2000 then
-    v.mapper.load_chr address
+    v.mapper.load address
   else if address < 0x3F00 then
     v.nametables.(mirror v.mapper.rom.headers.mirroring address)
   else if address < 0x4000 then
@@ -39,7 +39,7 @@ let load v address =
 
 let store v address value =
   if address < 0x2000 then
-    v.mapper.store_chr address value
+    v.mapper.store address value
   else if address < 0x3F00 then
     v.nametables.(mirror v.mapper.rom.headers.mirroring address) <- value
   else if address < 0x4000 then (
