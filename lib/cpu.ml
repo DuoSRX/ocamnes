@@ -253,10 +253,9 @@ let bvs cpu offset = branch cpu offset cpu.overflow
 let bvc cpu offset = branch cpu offset (not cpu.overflow)
 
 let bit cpu byte =
-  let result = cpu.a land byte in
-  cpu.negative <- Flags.negative land byte > 0;
-  cpu.overflow <- Flags.overflow land byte > 0;
-  cpu.zero <- result = 0
+  cpu.zero <- (cpu.a land byte) = 0;
+  cpu.overflow <- byte land Flags.overflow <> 0;
+  cpu.negative <- byte land Flags.negative <> 0
 
 let php cpu =
   let flags = (flags_to_int cpu) lor Flags.break4 in
