@@ -355,7 +355,7 @@ let render_pixel ppu =
   | false, true  -> sprite_color lor 0x10
   | true,  true  -> (
     let sprite = ppu.sprites.(sprite_idx) in
-    if sprite.priority = 0 && x < 255 then
+    if sprite.index = 0 && x < 255 then
       ppu.sprite0_hit <- true;
     if sprite.priority = 0 then
       sprite_color lor 0x10
