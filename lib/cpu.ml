@@ -37,6 +37,9 @@ type cpu = {
   mutable steps : int;
   mutable nmi : bool;
 
+  (* FIXME: Remove the dependency on PPU.
+     It's necessary to clear the NMIs and do DMAs right now.
+  *)
   ppu : Ppu.ppu;
   memory : Memory.t;
   mutable nestest : bool;
