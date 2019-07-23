@@ -332,12 +332,12 @@ let trigger_nmi cpu =
   cpu.ppu.nmi_triggered <- false
 
 let nmi cpu =
+  push_word cpu cpu.pc;
+  let flags = flags_to_int cpu in
+  push_byte cpu flags;
   cpu.nmi <- false;
   cpu.cycles <- cpu.cycles + 7;
   cpu.interrupt <- true;
-  push_word cpu cpu.pc;
-  let flags = (flags_to_int cpu) lor Flags.break5 in
-  push_byte cpu flags;
   cpu.pc <- load_word cpu 0xFFFA
 
 let op_is_branch = function
