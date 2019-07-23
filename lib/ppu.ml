@@ -49,7 +49,6 @@ type ppu = {
   mutable nmi_previous : bool;
   mutable nmi_delay : int;
 
-
   (* Temp stuff *)
   mutable tile_data : Uint64.t;
   mutable name_table_b : int;
@@ -71,15 +70,11 @@ type ppu = {
 
   frame_content : (int, Bigarray.int8_unsigned_elt, Bigarray.c_layout) Bigarray.Array1.t;
   registers: Registers.registers;
-  palettes : int array;
-  vram: int array;
   oam: int array;
-  nametables : int array;
-  rom : Cartridge.rom;
-  mapper : Mapper.t;
+  vram : Vram.t
 }
 
-let make ~rom ~mapper = {
+let make ~vram = {
   cycles = 340; scanline = 240; frames = 0;
   t = 0; v = 0; x = 0; w = true; f = false;
   registers = Registers.make ();
@@ -88,66 +83,15 @@ let make ~rom ~mapper = {
   sprite_count = 0; buffer = 0; sprites = Array.create ~len:8 {pattern=0;position=0;priority=0;index=0};
   tile_data = Uint64.zero; name_table_b = 0; attr_table_b = 0; low_byte = 0; high_byte = 0;
   frame_content = Bigarray.Array1.create Bigarray.int8_unsigned Bigarray.c_layout (256 * 240 * 3);
-  palettes = Array.create ~len:32 0;
-  vram = Array.create ~len:0x800 0;
   oam = Array.create ~len:0x100 0;
-  nametables = Array.create ~len:0x800 0;
-  rom; mapper;
+  vram;
 }
 
 let load ppu address =
-  if address < 0x2000 then
-    ppu.mapper.load_chr address
-  else if address < 0x3300 then (
-    (* if address < 0x2800 then (
-      ppu.nametables.(address land 0x3FF)
-    ) else (
-      ppu.nametables.(0x400 + (address land 0x3FF))
-    ) *)
-    (* TODO: Move this ghetto into a mapper *)
-    if address < 0x2400 then (
-      ppu.nametables.(address land 0x3FF)
-    ) else if address >= 0x2800 && address < 0x2C00 then (
-      ppu.nametables.(address land 0x3FF)
-    ) else if address >= 0x2400 && address < 0x2800 then (
-      ppu.nametables.(address - 0x2000)
-    ) else (
-      ppu.nametables.(address - 0x2800)
-    )
-  )
-  else if address < 0x4000 then
-    (* let addr = if address >= 16 && address % 4 = 0 then address - 16 else address in
-    ppu.palettes.(addr land 0x1F) *)
-    ppu.palettes.(address land 0x1F)
-  else
-    failwith @@ sprintf "Trying to read PPU VRAM @ %04X" address
+  Vram.load ppu.vram address
 
 let store ppu address value =
-  if address < 0x2000 then
-    ppu.mapper.store_chr address value
-  else if address < 0x3F00 then
-    (* if address < 0x2800 then (
-      ppu.nametables.(address land 0x3FF) <- value
-    ) else (
-      ppu.nametables.(0x400 + (address land 0x3FF)) <- value
-    ) *)
-    (* TODO: Move this ghetto into a mapper *)
-    if address < 0x2400 then (
-      ppu.nametables.(address land 0x3FF) <- value
-    ) else if address >= 0x2800 && address < 0x2C00 then (
-      ppu.nametables.(address land 0x3FF) <- value
-    ) else if address >= 0x2400 && address < 0x2800 then (
-      ppu.nametables.(address - 0x2000) <- value
-    ) else (
-      ppu.nametables.(address - 0x2800) <- value
-    )
-  else if address < 0x4000 then (
-    (* let addr = if address >= 16 && address % 4 = 0 then address - 16 else address in
-    ppu.palettes.(addr land 0x1F) <- value; *)
-    ppu.palettes.(address land 0x1F) <- value;
-  )
-  else
-    failwith @@ sprintf "Trying to write PPU VRAM @ %04X" address
+  Vram.store ppu.vram address value
 
 let nmi_change ppu =
   let nmi = ppu.nmi_output && ppu.nmi_occured in
@@ -174,7 +118,6 @@ let read_register ppu = function
   | 0x2001 -> (* PPUMASK *)
     ppu.registers.mask
   | 0x2002 -> (* PPUSTATUS *)
-    (* TODO: Sprite 0 and sprite overflow *)
     let result = (ppu.register land 0x1F)
       lor (if ppu.nmi_occured then 0x80 else 0)
       lor (if ppu.sprite0_hit then 0x40 else 0)
@@ -421,9 +364,7 @@ let render_pixel ppu =
   )
   in
 
-  (* let color = if b then bg else 0 in *)
-  (* let palette = load ppu (0x3F00 + color) in *)
-  let palette = ppu.palettes.(color) in
+  let palette = load ppu (0x3F00 + color) in
   set_pixel ppu x y (all_palettes.(palette land 0x3F))
 
 let tick ppu =
