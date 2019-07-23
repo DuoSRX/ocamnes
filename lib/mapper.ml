@@ -1,5 +1,12 @@
 open Core
 
+type t = {
+  load_prg : int -> int;
+  store_prg : int -> int -> unit;
+  load_chr : int -> int;
+  store_chr : int -> int -> unit;
+}
+
 module NRom = struct
   let load_prg (rom : Cartridge.rom) address =
     if address < 0x8000 then
@@ -19,14 +26,11 @@ module NRom = struct
     failwith @@ sprintf "Can't store to CHR @ %04X = %02X" address value
 end
 
-type t = {
-  load_prg : int -> int;
-  store_prg : int -> int -> unit;
-}
-
 let nrom rom =
   { load_prg = (NRom.load_prg rom)
   ; store_prg = (NRom.store_prg rom)
+  ; load_chr = (NRom.load_chr rom)
+  ; store_chr = (NRom.store_chr rom)
   }
 
 let mapper_from_rom (rom:Cartridge.rom) =
