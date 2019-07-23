@@ -25,12 +25,16 @@ module NRom = struct
   let load (rom : Cartridge.rom) address =
     if address < 0x2000 then
       load_chr rom address
+    else if address >= 0x6000 && address < 0x8000 then
+      rom.ram.(address)
     else
       load_prg rom address
 
   let store (rom : Cartridge.rom) address value =
     if address < 0x2000 then
       store_chr rom address value
+    else if address >= 0x6000 && address < 0x8000 then
+      rom.ram.(address - 0x6000) <- value
     else
       store_prg rom address value
 end
