@@ -2,15 +2,14 @@ open Core
 open Instructions
 
 module Flags = struct
-  let carry = 0b00000001
-  let zero  = 0b00000010
-  let interrupt = 0b00000100
-  let decimal = 0b00001000
-  let break4 = 0b00010000
-  let break5 = 0b00100000
-  let overflow = 0b01000000
-  let negative = 0b10000000
-  let b = break4 lor break5
+  let carry     = 0b0000_0001
+  let zero      = 0b0000_0010
+  let interrupt = 0b0000_0100
+  let decimal   = 0b0000_1000
+  let break4    = 0b0001_0000
+  let break5    = 0b0010_0000
+  let overflow  = 0b0100_0000
+  let negative  = 0b1000_0000
 end
 
 let wrapping_add a b = (a + b) land 0xFF
@@ -73,7 +72,6 @@ let load_word cpu address =
   let a = load_byte cpu address in
   let b = load_byte cpu (address + 1) in
   a lor b lsl 8
-
 
 let load_word_zero_page cpu address =
   let a = (address land 0xFF00) lor (wrapping_add (address land 0xFF) 1) in
@@ -288,14 +286,14 @@ let asl_op cpu args target =
 
 let ror cpu args target =
   let carry = if cpu.carry then 1 else 0 in
-  cpu.carry <- args lor 1 > 0;
+  cpu.carry <- args land 1 = 1;
   let result = (args lsr 1) lor (carry lsl 7) in
   write_target cpu target (set_nz_flags cpu result)
 
 let rol cpu args target =
   let carry = if cpu.carry then 1 else 0 in
-  let result = ((args lsl 1) lor carry) land 0xFF in
   cpu.carry <- args land 0x80 > 0;
+  let result = ((args lsl 1) lor carry) land 0xFF in
   write_target cpu target (set_nz_flags cpu result)
 
 let compare_op cpu a b =
