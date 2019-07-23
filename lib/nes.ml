@@ -11,7 +11,7 @@ type t = {
 }
 
 let make ?(nestest=false) ?(tracing=false) rom =
-  let mapper = Mapper.mapper_from_rom rom in
+  let mapper = Mapper.mapper_for ~rom in
   let vram = Vram.make ~mapper in
   let ppu = Ppu.make ~vram in
   let memory = Memory.make ~mapper ~ppu in

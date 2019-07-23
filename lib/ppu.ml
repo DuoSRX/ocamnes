@@ -365,7 +365,8 @@ let render_pixel ppu =
   in
 
   let palette = load ppu (0x3F00 + color) in
-  set_pixel ppu x y (all_palettes.(palette land 0x3F))
+  let palette_offset = if palette >= 16 && palette % 4 = 0 then 16 else 0 in
+  set_pixel ppu x y (all_palettes.((palette - palette_offset) land 0x3F))
 
 let tick ppu =
   if ppu.nmi_delay > 0 then (
