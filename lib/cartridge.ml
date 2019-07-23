@@ -14,15 +14,10 @@ type rom = {
 } [@@deriving show]
 
 let open_file name =
-  let file = Stdio.In_channel.create name in
-  let size = Int64.to_int_trunc(In_channel.length file) in
-  let buffer = Bytes.create size in
-  let _ = Stdio.In_channel.really_input file ~buf:buffer ~pos:0 ~len:size in
-  let result = Array.create ~len:size 0 in
-  for i = 0 to size - 1 do
-    result.(i) <- int_of_char @@ Bytes.get buffer i
-  done;
-  result
+  name
+  |> In_channel.read_all
+  |> String.to_array
+  |> Array.map ~f:Char.to_int
 
 let load_headers rom =
   {
