@@ -37,34 +37,21 @@ type cpu = {
   mutable steps : int;
   mutable nmi : bool;
 
-  memory : int array;
-  rom : Cartridge.rom;
   ppu : Ppu.ppu;
-  mapper : Mapper.t;
+  memory : Memory.t;
   mutable nestest : bool;
   mutable tracing : bool;
 }
 
-let make ~rom ~ppu ~nestest ~tracing ~mapper = {
-  rom; ppu; cycles = 0; memory = Array.create ~len:0x800 0;
+let make ~ppu ~nestest ~tracing ~memory = {
+  ppu; cycles = 0;
   a = 0; x = 0; y = 0; s = 0xFD; pc = 0; extra_cycles = 0;
   zero = false; negative = false; carry = false; decimal = false; interrupt = true; overflow = false;
   steps = -1; nmi = false;
-  tracing; nestest; mapper
+  tracing; nestest; memory
 }
 
-let load_byte cpu address =
-  if address < 0x2000 then
-    cpu.memory.(address land 0x7FF)
-  else if (address lsr 13) = 1 then
-    Ppu.read_register cpu.ppu (0x2000 + address % 8)
-  (* else if address = 0x4016 || address = 0x4017 then ( *)
-  else if address = 0x4016 then
-    if Input.next_key () then 1 else 0
-  else if address >= 0x4000 && address <= 0x4020 then
-    0 (* TODO: controllers, APU...etc *)
-  else
-    cpu.mapper.load_prg address
+let load_byte cpu address = Memory.load cpu.memory address
 
 let dma cpu address =
   let page = address * 0x100 in
@@ -74,19 +61,10 @@ let dma cpu address =
   cpu.extra_cycles <- cpu.extra_cycles + 513 + Bool.to_int (cpu.cycles % 2 = 1)
 
 let store_byte cpu address value =
-  if address < 0x2000 then
-    cpu.memory.(address land 0x7FF) <- value
-  else if (address lsr 13) = 1 then
-    Ppu.write_register cpu.ppu address value
-  else if address = 0x4014 then
+  if address = 0x4014 then
     dma cpu value
-  (* else if address = 0x4016 || address = 0x4017 then *)
-  else if address = 0x4016 then
-    Input.write value
-  else if address >= 0x4000 && address <= 0x4020 then
-    () (* TODO: controllers, APU...etc *)
   else
-    cpu.mapper.store_prg address value
+    Memory.store cpu.memory address value
 
 let load_word cpu address =
   let a = load_byte cpu address in

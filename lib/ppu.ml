@@ -76,9 +76,10 @@ type ppu = {
   oam: int array;
   nametables : int array;
   rom : Cartridge.rom;
+  mapper : Mapper.t;
 }
 
-let make ~rom = {
+let make ~rom ~mapper = {
   cycles = 340; scanline = 240; frames = 0;
   t = 0; v = 0; x = 0; w = true; f = false;
   registers = Registers.make ();
@@ -91,12 +92,12 @@ let make ~rom = {
   vram = Array.create ~len:0x800 0;
   oam = Array.create ~len:0x100 0;
   nametables = Array.create ~len:0x800 0;
-  rom;
+  rom; mapper;
 }
 
 let load ppu address =
   if address < 0x2000 then
-    ppu.rom.chr.(address)
+    ppu.mapper.load_chr address
   else if address < 0x3300 then (
     (* if address < 0x2800 then (
       ppu.nametables.(address land 0x3FF)
@@ -123,7 +124,7 @@ let load ppu address =
 
 let store ppu address value =
   if address < 0x2000 then
-    ppu.rom.chr.(address) <- value
+    ppu.mapper.store_chr address value
   else if address < 0x3F00 then
     (* if address < 0x2800 then (
       ppu.nametables.(address land 0x3FF) <- value

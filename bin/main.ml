@@ -88,7 +88,7 @@ let event_loop ~nes ~window ~renderer ~texture =
   done
 
 let main () =
-  let nes = Nes.make rom in
+  let nes = Nes.make rom ~tracing:false in
   nes.cpu.pc <- Cpu.load_word nes.cpu 0xFFFC;
 
   Sdl.init Sdl.Init.(video + events) |> sdl_try;
