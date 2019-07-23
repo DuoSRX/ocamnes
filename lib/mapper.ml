@@ -1,6 +1,7 @@
 open Core
 
 type t = {
+  rom : Cartridge.rom;
   load_prg : int -> int;
   store_prg : int -> int -> unit;
   load_chr : int -> int;
@@ -27,13 +28,14 @@ module NRom = struct
 end
 
 let nrom rom =
-  { load_prg = (NRom.load_prg rom)
+  { rom = rom
+  ; load_prg = (NRom.load_prg rom)
   ; store_prg = (NRom.store_prg rom)
   ; load_chr = (NRom.load_chr rom)
   ; store_chr = (NRom.store_chr rom)
   }
 
-let mapper_from_rom (rom:Cartridge.rom) =
+let mapper_for ~(rom:Cartridge.rom) =
   match rom.headers.mapper with
   | 0 -> nrom rom
   | n -> failwith @@ sprintf "Unknwown mapper: %d" n
