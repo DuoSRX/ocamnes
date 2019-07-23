@@ -18,7 +18,8 @@ Currently passes Nestest up to unofficial opcodes.
 * Better debugger and logging
 * Resize window
 
-## Game running mostly glitch-less:
+## Games running mostly glitch-less:
 
 * Donkey kong
 * Balloon fight
+* Lode runner

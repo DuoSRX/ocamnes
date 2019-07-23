@@ -36,7 +36,7 @@ let load_rom path =
   let rom = open_file path in
   let headers = load_headers rom in
   printf "Loaded rom %s\n" path;
-  printf "PRG:%04x CHR:%04x Mirroring: %s Mapper:%d\n"
+  printf "PRG:%04x CHR:%04x Mirroring:%s Mapper:%d\n"
     headers.prg_size headers.chr_size (show_mirroring headers.mirroring) headers.mapper;
 
   let chr = if headers.chr_size = 0 then
