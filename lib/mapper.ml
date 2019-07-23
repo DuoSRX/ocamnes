@@ -2,17 +2,13 @@ open Core
 
 type t = {
   rom : Cartridge.rom;
-  load_prg : int -> int;
-  store_prg : int -> int -> unit;
-  load_chr : int -> int;
-  store_chr : int -> int -> unit;
+  load : int -> int;
+  store : int -> int -> unit;
 }
 
 module NRom = struct
   let load_prg (rom : Cartridge.rom) address =
-    if address < 0x8000 then
-      0
-    else if rom.headers.prg_size > 0x4000 then
+    if rom.headers.prg_size > 0x4000 then
       rom.prg.(address land 0x7FFF)
     else
       rom.prg.(address land 0x3FFF)
@@ -25,14 +21,24 @@ module NRom = struct
 
   let store_chr (rom : Cartridge.rom) address value =
     rom.chr.(address) <- value
+
+  let load (rom : Cartridge.rom) address =
+    if address < 0x2000 then
+      load_chr rom address
+    else
+      load_prg rom address
+
+  let store (rom : Cartridge.rom) address value =
+    if address < 0x2000 then
+      store_chr rom address value
+    else
+      store_prg rom address value
 end
 
 let nrom rom =
   { rom = rom
-  ; load_prg = (NRom.load_prg rom)
-  ; store_prg = (NRom.store_prg rom)
-  ; load_chr = (NRom.load_chr rom)
-  ; store_chr = (NRom.store_chr rom)
+  ; load = (NRom.load rom)
+  ; store = (NRom.store rom)
   }
 
 let mapper_for ~(rom:Cartridge.rom) =

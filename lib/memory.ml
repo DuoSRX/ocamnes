@@ -23,10 +23,8 @@ let load m address =
     if Input.next_key () then 1 else 0
   else if address < 0x6000 then
     0
-  else if address < 0x8000 then
-    m.mapper.rom.ram.(address - 0x6000)
   else
-    m.mapper.load_prg address
+    m.mapper.load address
 
 let store m address value =
   if address < 0x2000 then
@@ -39,7 +37,5 @@ let store m address value =
     Input.write value
   else if address < 0x6000 then
     ()
-  else if address < 0x8000 then
-    m.mapper.rom.ram.(address - 0x6000) <- value
   else
-    m.mapper.store_prg address value
+    m.mapper.store address value
