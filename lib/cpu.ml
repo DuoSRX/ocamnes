@@ -74,10 +74,12 @@ let load_word cpu address =
   let b = load_byte cpu (address + 1) in
   a lor b lsl 8
 
+
 let load_word_zero_page cpu address =
-  let a = load_byte cpu address in
-  let b = load_byte cpu (wrapping_add address 1) in
-  a lor b lsl 8
+  let a = (address land 0xFF00) lor (wrapping_add (address land 0xFF) 1) in
+  let lo = load_byte cpu address in
+  let hi = load_byte cpu a in
+  lo lor hi lsl 8
 
 let store_word cpu address value =
   let lo = value land 0xFF in
@@ -172,10 +174,8 @@ let decode_addressing_mode cpu am extra_page_cycles =
     if page_crossed word address then cpu.extra_cycles <- cpu.extra_cycles + extra_page_cycles;
     (lazy (load_byte cpu address), Some(address), 1)
   | Indirect ->
-    let address = load_word cpu pc in
-    let lo = load_byte cpu address in
-    let hi = (address land 0xFF00) lor ((address + 1) land 0xFF) in
-    let dest = lo lor ((load_byte cpu hi) lsl 8) in
+    let zero_page = load_word cpu pc in
+    let dest = load_word_zero_page cpu zero_page in
     (lazy (load_word cpu dest), Some(dest), 2)
   | Accumulator ->
     (lazy (cpu.a), None, 0)
