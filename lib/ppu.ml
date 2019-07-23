@@ -130,7 +130,6 @@ let read_register ppu = function
   | 0x2004 -> (* OAMDATA *)
     ppu.oam.(ppu.registers.oam)
   | 0x2007 -> (* PPUDATA *)
-    (* let value = load ppu (ppu.v land 0x3FFF) in *)
     let value = load ppu ppu.v in
     let value = if (ppu.v % 0x4000 < 0x3F00) then (
       let buffer = ppu.buffer in
@@ -181,7 +180,6 @@ let write_register ppu register value =
     );
     ppu.w <- not ppu.w;
   | 0x2007 -> (* PPUDATA *)
-    (* store ppu (ppu.v land 0x3FFF) value; *)
     store ppu ppu.v value;
     ppu.v <- (ppu.v + address_increment ppu)
   | _ as r -> failwith @@ sprintf "Cannot write PPU Register @ %04X" r
@@ -297,10 +295,9 @@ let make_sprites ppu =
       if !n < 8 then (
         let position = x in
         let priority = (attrs lsr 5) land 1 in
-        let index = !n in (* FIXME should this be taken from the OAM instead? *)
+        let index = !n in
         let pattern = sprite_pattern ppu ~tile ~row ~attrs in
-
-        ppu.sprites.(!n) <- { position; priority; index; pattern } (* FIXME don't allocate new sprites *)
+        ppu.sprites.(!n) <- { position; priority; index; pattern }
       );
       n := !n + 1
     );

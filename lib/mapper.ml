@@ -23,8 +23,8 @@ module NRom = struct
   let load_chr (rom : Cartridge.rom) address =
     rom.chr.(address)
 
-  let store_chr _rom address value =
-    failwith @@ sprintf "Can't store to CHR @ %04X = %02X" address value
+  let store_chr (rom : Cartridge.rom) address value =
+    rom.chr.(address) <- value
 end
 
 let nrom rom =
