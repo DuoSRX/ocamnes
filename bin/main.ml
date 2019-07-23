@@ -92,14 +92,12 @@ let main () =
   nes.cpu.pc <- Cpu.load_word nes.cpu 0xFFFC;
 
   Sdl.init Sdl.Init.(video + events) |> sdl_try;
-  Sdl.log "SDL Loaded";
 
   let flags = Sdl.Window.(shown + opengl) in
   let window = sdl_try @@ Sdl.create_window ~w:1024 ~h:960 "Ocamnes" flags in
   let renderer = sdl_try @@ Sdl.create_renderer window ~flags:(Sdl.Renderer.accelerated) in
   let texture = sdl_try @@ Sdl.create_texture renderer Sdl.Pixel.format_rgb24 Sdl.Texture.access_streaming ~w:256 ~h:240 in
   event_loop ~nes ~window ~renderer ~texture;
-  Sdl.log "Bye!";
   Sdl.quit ();
   exit 0
 

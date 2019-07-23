@@ -160,7 +160,7 @@ let decode_addressing_mode cpu am extra_page_cycles =
   | Relative ->
     let offset = lazy (
       let byte = load_byte cpu pc in
-      if byte < 0x80 then cpu.pc + byte else cpu.pc + byte - 0x100
+      if byte < 0x80 then pc + 1 + byte else pc + 1 + byte - 0x100
     ) in
     (offset, Some pc, 1)
   | IndirectX ->
@@ -239,9 +239,9 @@ let brk _ = failwith "oh no BRK"
 
 let branch cpu addr cond =
   if cond then
-    let cycles = if page_crossed addr (cpu.pc + 2) then 2 else 1 in
+    let cycles = if page_crossed addr cpu.pc then 2 else 1 in
     cpu.extra_cycles <- cpu.extra_cycles + cycles;
-    cpu.pc <- addr + 2
+    cpu.pc <- addr
 
 let bcs cpu offset = branch cpu offset cpu.carry
 let bcc cpu offset = branch cpu offset (not cpu.carry)
@@ -375,7 +375,7 @@ let args_to_string cpu i =
     sprintf "($%02X),Y = %04X @ %04X = %02X" byte sum (Option.value_exn i.target) i.args
   | Indirect -> sprintf "($%04X) = %04X" (load_word cpu (cpu.pc + 1)) (Option.value_exn i.target)
   | Relative ->
-    sprintf "$%04X" (i.args + 2);
+    sprintf "$%04X" (i.args);
   | Accumulator -> "A"
   | Implicit -> ""
 
