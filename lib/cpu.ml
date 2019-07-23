@@ -40,16 +40,17 @@ type cpu = {
   memory : int array;
   rom : Cartridge.rom;
   ppu : Ppu.ppu;
+  mapper : Mapper.t;
   mutable nestest : bool;
   mutable tracing : bool;
 }
 
-let make ~rom ~ppu ~nestest ~tracing = {
+let make ~rom ~ppu ~nestest ~tracing ~mapper = {
   rom; ppu; cycles = 0; memory = Array.create ~len:0x800 0;
   a = 0; x = 0; y = 0; s = 0xFD; pc = 0; extra_cycles = 0;
   zero = false; negative = false; carry = false; decimal = false; interrupt = true; overflow = false;
   steps = -1; nmi = false;
-  tracing; nestest;
+  tracing; nestest; mapper
 }
 
 let load_byte cpu address =
@@ -62,12 +63,8 @@ let load_byte cpu address =
     if Input.next_key () then 1 else 0
   else if address >= 0x4000 && address <= 0x4020 then
     0 (* TODO: controllers, APU...etc *)
-  else if address < 0x8000 then
-    cpu.rom.ram.(address land 0x1FFF)
-  else if cpu.rom.headers.prg_size > 0x4000 then
-    cpu.rom.prg.(address land 0x7FFF)
   else
-    cpu.rom.prg.(address land 0x3FFF)
+    cpu.mapper.load_prg address
 
 let dma cpu address =
   let page = address * 0x100 in
@@ -88,11 +85,8 @@ let store_byte cpu address value =
     Input.write value
   else if address >= 0x4000 && address <= 0x4020 then
     () (* TODO: controllers, APU...etc *)
-  else if address < 0x8000 then
-    cpu.rom.ram.(address land 0x1FFF) <- value
   else
-    failwith @@ sprintf "Can't write to PRG @ %04X" address
-    (* cpu.rom.prg.(address land 0x3FFF) <- value *)
+    cpu.mapper.store_prg address value
 
 let load_word cpu address =
   let a = load_byte cpu address in
