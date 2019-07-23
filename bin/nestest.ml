@@ -18,14 +18,9 @@ let trace cpu instruction opcode =
 
 let main () =
   let nestest = In_channel.read_lines "./roms/nestest.log" |> Array.of_list in
-  let memory = Array.create ~len:0x10000 0 in
   let rom = load_rom "./roms/nestest.nes" in
-  let cpu = {
-    rom = rom; ppu = Ppu.make ~rom; cycles = 0; nmi = false;
-    a = 0; x = 0; y = 0; memory; s = 0xFD; pc = 0; extra_cycles = 0;
-    zero = false; negative = false; carry = false; decimal = false; interrupt = true; overflow = false;
-    nestest = true; tracing = true; steps = -1;
-  } in
+  let nes = Nes.make ~tracing:true ~nestest:true rom in
+  let cpu = nes.cpu in
   cpu.pc <- 0xC000;
 
   let term = ref false in

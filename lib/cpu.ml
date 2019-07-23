@@ -44,6 +44,14 @@ type cpu = {
   mutable tracing : bool;
 }
 
+let make ~rom ~ppu ~nestest ~tracing = {
+  rom; ppu; cycles = 0; memory = Array.create ~len:0x800 0;
+  a = 0; x = 0; y = 0; s = 0xFD; pc = 0; extra_cycles = 0;
+  zero = false; negative = false; carry = false; decimal = false; interrupt = true; overflow = false;
+  steps = -1; nmi = false;
+  tracing; nestest;
+}
+
 let load_byte cpu address =
   if address < 0x2000 then
     cpu.memory.(address land 0x7FF)
