@@ -628,10 +628,9 @@ let execute_instruction cpu instruction =
   | TYA -> tya cpu
 
 module Debugger = struct
-  (* let breakpoints = ref (Int.Set.of_list [0xE39F]) *)
   let breakpoints = ref (Int.Set.of_list [])
   let break_on_step = ref false
-  let break_after = ref 1000000000
+  let break_after = ref (-1)
 
   let rec prompt cpu =
     print_string "(DEBUG) ";

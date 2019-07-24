@@ -25,9 +25,8 @@ Currently passes the Nestest suite up to unofficial opcodes.
 ## TODO
 
 * Limit FPS (currently runs at about 100 fps on 4.07.0, 120 fps on 4.07.1+flambda)
-* Mappers (only NROM is supported)
+* Mappers (only NROM/UxROM are supported)
 * PPU
-  * 8x16 Sprites
   * Special flags to stop rendering sprites at the edge
 * IRQ (Not sure if they're used anywhere)
 * APU
