@@ -17,7 +17,7 @@ let wrapping_sub a b = wrapping_add a (-b)
 let wrapping_add_w a b = (a + b) land 0xFFFF
 let wrapping_sub_w a b = wrapping_add_w a (-b)
 
-type cpu = {
+type t = {
   mutable a : int;
   mutable x : int;
   mutable y : int;
@@ -38,7 +38,7 @@ type cpu = {
 
   (* FIXME: Remove the dependency on PPU.
      It's necessary to clear the NMIs *)
-  ppu : Ppu.ppu;
+  ppu : Ppu.t;
   memory : Memory.t;
   mutable nestest : bool;
   mutable tracing : bool;
@@ -115,13 +115,13 @@ module AddressingMode = struct
     [@@deriving show]
 end
 
-open AddressingMode
 
 let do_read = function
   | STA | STX | STY -> false
   | _ -> true
 
 let decode_addressing_mode cpu am extra_page_cycles =
+  let open AddressingMode in
   let pc = cpu.pc + 1 in
   match am with
   | Immediate ->
@@ -382,7 +382,7 @@ let args_to_hex_string cpu i =
   | ZeroPage -> sprintf "%02X" (Option.value_exn i.target)
   | Accumulator | Implicit -> ""
 
-let trace (cpu : cpu) instruction opcode =
+let trace (cpu : t) instruction opcode =
   let cy = cpu.cycles * 3 mod 341 in
   let args = args_to_hex_string cpu instruction in
   let status = sprintf "A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%3d" cpu.a cpu.x cpu.y (flags_to_int cpu) cpu.s cy in
@@ -392,6 +392,7 @@ let trace (cpu : cpu) instruction opcode =
   sprintf "%04X  %02X %-6s%-32s %s" cpu.pc opcode args instr status
 
 let decode opcode =
+  let open AddressingMode in
   match opcode with
   | 0x1A | 0x3A | 0x5A | 0x7A | 0xDA | 0xFA -> (NOP, Implicit, 2, 0)
   | 0x80 | 0x82 | 0x89 | 0xC2 | 0xE2 -> (NOP, Immediate, 2, 0)

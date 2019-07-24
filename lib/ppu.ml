@@ -24,7 +24,7 @@ type sprite = {
   index : int;
 }
 
-type ppu = {
+type t = {
   mutable cycles : int;
   mutable scanline : int;
   mutable frames : int;
