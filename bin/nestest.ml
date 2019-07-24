@@ -26,7 +26,7 @@ let main () =
   let term = ref false in
 
   while not !term do
-    let log = Option.value_exn (step cpu ~trace_fun:trace) in
+    let log = Option.value_exn (Nes.step nes ~trace_fun:trace) in
     logs.(cpu.steps % log_length) <- log;
 
     let nestest_log = nestest.(cpu.steps) in
