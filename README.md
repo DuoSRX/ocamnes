@@ -6,14 +6,14 @@ Currently passes the Nestest suite up to unofficial opcodes.
 
 ## Controls
 
-* Up: up arrow
-* Down: down arrow
-* Left: left arrow
-* Right: right arrow
-* A: Z
-* B: X
-* Start: enter
-* Select: left shift
+* Q, Escape -> Quit
+* Arrow keys -> Left, down, up, right
+* Z: A button
+* X: B Button
+* Return -> Start
+* Left Shift -> Select
+* S -> Saves a screenshot as `screenshot.png`
+* Space -> Start the debugger
 
 ## Games running mostly glitch-less:
 
