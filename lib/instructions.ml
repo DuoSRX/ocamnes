@@ -1,4 +1,4 @@
-type instruction =
+type t =
     ADC
   | AND
   | ASL

@@ -174,7 +174,7 @@ let decode_addressing_mode cpu am extra_page_cycles =
     (lazy 0, None, 0)
 
 type instr = {
-  op : Instructions.instruction;
+  op : Instructions.t;
   mode : AddressingMode.t;
   args : int;
   target : int option;
@@ -329,67 +329,6 @@ let nmi cpu =
   cpu.cycles <- cpu.cycles + 7;
   cpu.interrupt <- true;
   cpu.pc <- load_word cpu 0xFFFA
-
-let op_is_branch = function
-  | JMP | JSR -> false
-  | BCC | BCS | BEQ | BNE | BPL -> false
-  | _ -> true
-
-let args_to_string cpu i =
-  match i.mode with
-  | Immediate -> sprintf "#$%02X" i.args
-  | Absolute ->
-    if op_is_branch i.op then
-      sprintf "$%04X = %02X" (Option.value_exn i.target) i.args
-    else
-      sprintf "$%04X" (Option.value_exn i.target)
-  | AbsoluteX ->
-    sprintf "$%04X,X @ %04X = %02X" (load_word cpu (cpu.pc + 1)) (Option.value_exn i.target) i.args
-  | AbsoluteY ->
-    sprintf "$%04X,Y @ %04X = %02X" (load_word cpu (cpu.pc + 1)) (Option.value_exn i.target) i.args
-  | ZeroPage -> sprintf "$%02X = %02X" (Option.value_exn i.target) i.args
-  | ZeroPageX ->
-    let byte = load_byte cpu (cpu.pc + 1) in
-    sprintf "$%02X,X @ %02X = %02X" byte (Option.value_exn i.target) i.args
-  | ZeroPageY ->
-    let byte = load_byte cpu (cpu.pc + 1) in
-    sprintf "$%02X,Y @ %02X = %02X" byte (Option.value_exn i.target) i.args
-  | IndirectX ->
-    let byte = load_byte cpu (cpu.pc + 1) in
-    let sum = wrapping_add byte cpu.x in
-    sprintf "($%02X,X) @ %02X = %04X = %02X" byte sum (Option.value_exn i.target) i.args
-  | IndirectY ->
-    let byte = load_byte cpu (cpu.pc + 1) in
-    let sum = wrapping_sub_w (Option.value_exn i.target) cpu.y in
-    sprintf "($%02X),Y = %04X @ %04X = %02X" byte sum (Option.value_exn i.target) i.args
-  | Indirect -> sprintf "($%04X) = %04X" (load_word cpu (cpu.pc + 1)) (Option.value_exn i.target)
-  | Relative ->
-    sprintf "$%04X" (i.args);
-  | Accumulator -> "A"
-  | Implicit -> ""
-
-let word_to_byte_string w =
-  let lo = w land 0xFF in
-  let hi = (w lsr 8) land 0xFF in
-  sprintf "%02X %02X" lo hi
-
-let args_to_hex_string cpu i =
-  match i.mode with
-  | Immediate -> sprintf "%02X" i.args
-  | IndirectX | IndirectY | ZeroPageX | ZeroPageY | Relative -> sprintf "%02X" (load_byte cpu (cpu.pc + 1))
-  | Absolute -> word_to_byte_string (Option.value_exn i.target)
-  | Indirect | AbsoluteX | AbsoluteY -> word_to_byte_string (load_word cpu (cpu.pc + 1))
-  | ZeroPage -> sprintf "%02X" (Option.value_exn i.target)
-  | Accumulator | Implicit -> ""
-
-let trace (cpu : t) instruction opcode =
-  let cy = cpu.cycles * 3 mod 341 in
-  let args = args_to_hex_string cpu instruction in
-  let status = sprintf "A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%3d" cpu.a cpu.x cpu.y (flags_to_int cpu) cpu.s cy in
-  let str_op = Instructions.show_instruction instruction.op in
-  let instr = sprintf "%s %s" str_op (args_to_string cpu instruction) in
-  (* let instr = str_op in *)
-  sprintf "%04X  %02X %-6s%-32s %s" cpu.pc opcode args instr status
 
 let decode opcode =
   let open AddressingMode in
@@ -621,7 +560,7 @@ let execute_instruction cpu instruction =
   | TXS -> txs cpu
   | TYA -> tya cpu
 
-let step ?(trace_fun = trace) ~on_step cpu =
+let step ~trace_fun ~on_step cpu =
   if cpu.nmi then nmi cpu;
   let opcode = load_byte cpu cpu.pc in
   let instruction = decode_instruction cpu opcode in
