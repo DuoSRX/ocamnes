@@ -40,8 +40,6 @@ let render ~texture ~renderer ~pixels =
   Sdl.render_present renderer
 
 let event_loop ~nes ~window ~renderer ~texture =
-  let cpu = nes.cpu in
-  let ppu = nes.ppu in
   let e = Sdl.Event.create () in
   let frame_count = ref 0 in
   let ticks = ref (Sdl.get_ticks () |> Int32.to_float) in
@@ -49,18 +47,10 @@ let event_loop ~nes ~window ~renderer ~texture =
   let do_quit = ref false in
 
   while not !do_quit do
-    let prev_cycles = cpu.cycles in
-    step cpu |> Option.iter ~f:print_endline;
-    let elapsed_cycles = cpu.cycles - prev_cycles in
+    Nes.step nes |> Option.iter ~f:print_endline;
 
-    for _ = 1 to elapsed_cycles * 3 do
-      Ppu.step ppu;
-    done;
-
-    if ppu.nmi_triggered then Cpu.trigger_nmi cpu;
-
-    if !prev_frames <> ppu.frames then (
-      prev_frames := ppu.frames;
+    if !prev_frames <> nes.ppu.frames then (
+      prev_frames := nes.ppu.frames;
 
       let now = Sdl.get_ticks () |> Int32.to_float in
       if now >= (!ticks +. 1000.0) then (
@@ -71,7 +61,7 @@ let event_loop ~nes ~window ~renderer ~texture =
         frame_count := !frame_count + 1;
       );
 
-      render ~renderer ~texture ~pixels:ppu.frame_content;
+      render ~renderer ~texture ~pixels:nes.ppu.frame_content;
       Out_channel.flush stdout;
 
       let key_scancode e = Sdl.Scancode.enum Sdl.Event.(get e keyboard_scancode) in
@@ -79,7 +69,7 @@ let event_loop ~nes ~window ~renderer ~texture =
         match Sdl.Event.(enum (get e typ)) with
           | `Quit -> do_quit := true
           | `Key_down when key_scancode e = `Escape -> do_quit := true
-          | `Key_down when key_scancode e = `Space -> Cpu.Debugger.break_on_step := true
+          | `Key_down when key_scancode e = `Space -> Debugger.break_on_step := true
           | `Key_up -> update_input ~down:false (key_scancode e)
           | `Key_down -> update_input ~down:true (key_scancode e)
           | _ -> ()
