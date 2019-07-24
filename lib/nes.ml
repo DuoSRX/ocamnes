@@ -18,7 +18,7 @@ let make ?(nestest=false) ?(tracing=false) rom =
   let vram = Vram.make ~mapper in
   let ppu = Ppu.make ~vram in
   let memory = Memory.make ~mapper ~ppu in
-  let cpu = Cpu.make ~ppu ~nestest ~tracing ~memory in
+  let cpu = Cpu.make ~nestest ~tracing ~memory in
   {
     ppu; rom; cpu;
   }
@@ -91,77 +91,82 @@ module Debugger = struct
   let break_on_step = ref false
   let break_after = ref (-2)
 
-  let rec prompt (cpu:Cpu.t) =
+  let rec prompt nes =
+    let cpu = nes.cpu in
+    let ppu = nes.ppu in
     print_string "(DEBUG) ";
     Out_channel.(flush stdout);
     let command = In_channel.(input_line_exn stdin) in
     match (String.split command ~on:' ') with
-    | [""] -> prompt cpu
+    | [""] -> prompt nes
     | ["s"] | ["step"] -> break_on_step := true
     | ["c"] | ["continue"] -> break_on_step := false
     | ["q"] | ["quit"] | ["exit"] -> exit 1;
-    | ["steps"] -> printf "%d\n" cpu.steps; prompt cpu
+    | ["steps"] -> printf "%d\n" cpu.steps; prompt nes
     | "bp" :: "del" :: bp :: _ ->
       breakpoints := Set.remove !breakpoints (Int.of_string bp);
-      prompt cpu
+      prompt nes
     | "bp" :: "add" :: bp :: _ ->
       breakpoints := Set.add !breakpoints (Int.of_string bp);
-      prompt cpu
+      prompt nes
     | "bp" :: [] ->
       !breakpoints |> Set.to_list |> List.map ~f:(sprintf "%04X") |> String.concat ~sep:", " |> print_endline;
-      prompt cpu
+      prompt nes
     | "byte" :: addr :: [] ->
       printf "%02X\n" (Cpu.load_byte cpu (Int.of_string addr));
-      prompt cpu
+      prompt nes
     | "byte" :: a :: b :: [] ->
       Interval.Int.create (Int.of_string a) (Int.of_string b)
       |> Interval.Int.to_list
       |> List.map ~f:(Cpu.load_byte cpu)
       |> List.iter ~f:(printf "%02X ");
       print_endline "";
-      prompt cpu
+      prompt nes
     | "ppu" :: addr :: [] ->
-      printf "%02X\n" (Ppu.load cpu.ppu (Int.of_string addr));
-      prompt cpu
+      printf "%02X\n" (Ppu.load ppu (Int.of_string addr));
+      prompt nes
     | "ppu" :: a :: b :: [] ->
       Interval.Int.create (Int.of_string a) (Int.of_string b)
       |> Interval.Int.to_list
-      |> List.map ~f:(Ppu.load cpu.ppu)
+      |> List.map ~f:(Ppu.load ppu)
       |> List.iter ~f:(printf "%02X ");
       print_endline "";
-      prompt cpu
+      prompt nes
     | "oam" :: [] ->
-      cpu.ppu.oam |> Array.iter ~f:(printf "%02X ");
+      ppu.oam |> Array.iter ~f:(printf "%02X ");
       print_endline "";
-      prompt cpu
+      prompt nes
     | "word" :: addr :: _ ->
       printf "%04X\n" (Cpu.load_word cpu (Int.of_string addr));
-      prompt cpu
+      prompt nes
     | "pputrace" :: [] ->
-      printf "T:%04X V:%04X X:%04X\n" cpu.ppu.t cpu.ppu.v cpu.ppu.x;
-      prompt cpu
+      printf "T:%04X V:%04X X:%04X\n" ppu.t ppu.v ppu.x;
+      prompt nes
     | _ ->
       print_endline "Unknown command (q to quit, s to step, c to continue)";
-      prompt cpu
+      prompt nes
 
     let should_break (cpu:Cpu.t) =
       !break_on_step || Set.mem !breakpoints cpu.pc || !break_after = cpu.steps
-end
 
-let on_step (cpu:Cpu.t) instruction opcode =
-  if Debugger.should_break cpu then (
-    print_endline @@ trace cpu instruction opcode;
-    Debugger.prompt cpu;
-  )
+    let on_step nes instruction opcode =
+      if should_break nes.cpu then (
+        print_endline @@ trace nes.cpu instruction opcode;
+        prompt nes
+      )
+end
 
 let step ?(trace_fun=trace) nes =
   let prev_cycles = nes.cpu.cycles in
-  let log = Cpu.step nes.cpu ~on_step:on_step ~trace_fun in
+  let log = Cpu.step nes.cpu ~on_step:(Debugger.on_step nes) ~trace_fun in
   let elapsed_cycles = nes.cpu.cycles - prev_cycles in
 
   for _ = 1 to elapsed_cycles * 3 do
     Ppu.step nes.ppu;
   done;
 
-  if nes.ppu.nmi_triggered then Cpu.trigger_nmi nes.cpu;
+  if nes.ppu.nmi_triggered then (
+    nes.cpu.nmi_triggered <- true;
+    nes.ppu.nmi_triggered <- false
+  );
   log

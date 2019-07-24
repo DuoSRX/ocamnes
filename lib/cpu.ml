@@ -34,21 +34,19 @@ type t = {
   mutable cycles : int;
   mutable extra_cycles: int;
   mutable steps : int;
-  mutable nmi : bool;
+  mutable nmi_triggered : bool;
 
-  (* FIXME: Remove the dependency on PPU.
-     It's necessary to clear the NMIs *)
-  ppu : Ppu.t;
-  memory : Memory.t;
   mutable nestest : bool;
   mutable tracing : bool;
+
+  memory : Memory.t;
 }
 
-let make ~ppu ~nestest ~tracing ~memory = {
-  ppu; cycles = 0;
-  a = 0; x = 0; y = 0; s = 0xFD; pc = 0; extra_cycles = 0;
+let make ~nestest ~tracing ~memory = {
+  cycles = 0; extra_cycles = 0;
+  a = 0; x = 0; y = 0; s = 0xFD; pc = 0;
   zero = false; negative = false; carry = false; decimal = false; interrupt = true; overflow = false;
-  steps = -1; nmi = false;
+  steps = -1; nmi_triggered = false;
   tracing; nestest; memory
 }
 
@@ -317,15 +315,11 @@ let rti cpu =
   plp cpu;
   cpu.pc <- pop_word cpu
 
-let trigger_nmi cpu =
-  cpu.nmi <- true;
-  cpu.ppu.nmi_triggered <- false
-
 let nmi cpu =
   push_word cpu cpu.pc;
   let flags = flags_to_int cpu in
   push_byte cpu flags;
-  cpu.nmi <- false;
+  cpu.nmi_triggered <- false;
   cpu.cycles <- cpu.cycles + 7;
   cpu.interrupt <- true;
   cpu.pc <- load_word cpu 0xFFFA
@@ -561,11 +555,11 @@ let execute_instruction cpu instruction =
   | TYA -> tya cpu
 
 let step ~trace_fun ~on_step cpu =
-  if cpu.nmi then nmi cpu;
+  if cpu.nmi_triggered then nmi cpu;
   let opcode = load_byte cpu cpu.pc in
   let instruction = decode_instruction cpu opcode in
   let log = if cpu.tracing then Some (trace_fun cpu instruction opcode) else None in
-  on_step cpu instruction opcode;
+  on_step instruction opcode;
   cpu.pc <- cpu.pc + instruction.size;
   execute_instruction cpu instruction;
   cpu.cycles <- cpu.cycles + instruction.cycles + cpu.extra_cycles;
