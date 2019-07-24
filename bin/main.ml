@@ -42,7 +42,6 @@ let event_loop ~nes ~window ~renderer ~texture =
   let e = Sdl.Event.create () in
   let before = ref (Unix.gettimeofday ()) in
   let last_time = ref (Unix.gettimeofday ()) in
-  let target_fps = 1.0 /. 60.0 in
   let frame_count = ref 0 in
   let prev_frames = ref 0 in
   let do_quit = ref false in
@@ -62,10 +61,7 @@ let event_loop ~nes ~window ~renderer ~texture =
       prev_frames := ppu.frames;
 
       let now = Unix.gettimeofday () in
-      let elapsed = now -. !before in
       before := now;
-      if elapsed < target_fps then
-        Thread.delay (target_fps -. elapsed);
 
       if now >= (!last_time +. 1.0) then (
         ignore @@ Sdl.set_window_title window (sprintf "%d FPS - %d steps" !frame_count cpu.steps);
@@ -101,8 +97,8 @@ let main () =
   Sdl.init Sdl.Init.(video + events) |> sdl_try;
 
   let flags = Sdl.Window.(shown + opengl + resizable) in
-  let window = sdl_try @@ Sdl.create_window ~w:1024 ~h:960 "Ocamnes" flags in
-  let renderer = sdl_try @@ Sdl.create_renderer window ~flags:(Sdl.Renderer.accelerated) in
+  let window = sdl_try @@ Sdl.create_window ~w:512 ~h:480 "Ocamnes" flags in
+  let renderer = sdl_try @@ Sdl.create_renderer window ~flags:(Sdl.Renderer.(accelerated + presentvsync)) in
   let texture = sdl_try @@ Sdl.create_texture renderer Sdl.Pixel.format_rgb24 Sdl.Texture.access_streaming ~w:256 ~h:240 in
   event_loop ~nes ~window ~renderer ~texture;
   Sdl.quit ();
