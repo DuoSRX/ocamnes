@@ -17,7 +17,6 @@ type rom = {
   ram: int array;
 } [@@deriving show]
 
-
 let open_file name =
   name
   |> In_channel.read_all

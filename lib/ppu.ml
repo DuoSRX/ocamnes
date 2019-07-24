@@ -88,10 +88,10 @@ let make ~vram = {
 }
 
 let load ppu address =
-  Vram.load ppu.vram address
+  Vram.load ppu.vram (address land 0x3FFF)
 
 let store ppu address value =
-  Vram.store ppu.vram address value
+  Vram.store ppu.vram (address land 0x3FFF) value
 
 let nmi_change ppu =
   let nmi = ppu.nmi_output && ppu.nmi_occured in
