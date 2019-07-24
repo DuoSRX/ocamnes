@@ -36,13 +36,18 @@ let sdl_try result = match result with
 | Ok res -> res
 | Error (`Msg m) -> Sdl.log "Create renderer error %s" m; exit 1
 
+let render ~texture ~renderer ~pixels =
+  Sdl.update_texture texture None pixels (256 * 3) |> sdl_try;
+  Sdl.render_clear renderer |> sdl_try;
+  Sdl.render_copy renderer texture |> sdl_try;
+  Sdl.render_present renderer
+
 let event_loop ~nes ~window ~renderer ~texture =
   let cpu = nes.cpu in
   let ppu = nes.ppu in
   let e = Sdl.Event.create () in
-  let before = ref (Unix.gettimeofday ()) in
-  let last_time = ref (Unix.gettimeofday ()) in
   let frame_count = ref 0 in
+  let ticks = ref (Sdl.get_ticks () |> Int32.to_float) in
   let prev_frames = ref 0 in
   let do_quit = ref false in
 
@@ -60,21 +65,16 @@ let event_loop ~nes ~window ~renderer ~texture =
     if !prev_frames <> ppu.frames then (
       prev_frames := ppu.frames;
 
-      let now = Unix.gettimeofday () in
-      before := now;
-
-      if now >= (!last_time +. 1.0) then (
-        ignore @@ Sdl.set_window_title window (sprintf "%d FPS - %d steps" !frame_count cpu.steps);
+      let now = Sdl.get_ticks () |> Int32.to_float in
+      if now >= (!ticks +. 1000.0) then (
+        ignore @@ Sdl.set_window_title window (sprintf "%d FPS" !frame_count);
         frame_count := 0;
-        last_time := now
+        ticks := now;
       ) else (
         frame_count := !frame_count + 1;
       );
 
-      Sdl.update_texture texture None ppu.frame_content (256 * 3) |> sdl_try;
-      Sdl.render_clear renderer |> sdl_try;
-      Sdl.render_copy renderer texture |> sdl_try;
-      Sdl.render_present renderer;
+      render ~renderer ~texture ~pixels:ppu.frame_content;
       Out_channel.flush stdout;
 
       let key_scancode e = Sdl.Scancode.enum Sdl.Event.(get e keyboard_scancode) in
