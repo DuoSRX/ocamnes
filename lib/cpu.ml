@@ -37,8 +37,7 @@ type cpu = {
   mutable nmi : bool;
 
   (* FIXME: Remove the dependency on PPU.
-     It's necessary to clear the NMIs and do DMAs right now.
-  *)
+     It's necessary to clear the NMIs *)
   ppu : Ppu.ppu;
   memory : Memory.t;
   mutable nestest : bool;
@@ -53,20 +52,14 @@ let make ~ppu ~nestest ~tracing ~memory = {
   tracing; nestest; memory
 }
 
-let load_byte cpu address = Memory.load cpu.memory address
-
-let dma cpu address =
-  let page = address * 0x100 in
-  for x = 0 to 255 do
-    Ppu.write_register cpu.ppu 0x2004 (load_byte cpu (page + x))
-  done;
-  cpu.extra_cycles <- cpu.extra_cycles + 513 + Bool.to_int (cpu.cycles % 2 = 1)
+let load_byte cpu address =
+  Memory.load cpu.memory address
 
 let store_byte cpu address value =
-  if address = 0x4014 then
-    dma cpu value
-  else
-    Memory.store cpu.memory address value
+  if address = 0x4014 then (* Extra cycles for DMA *)
+    cpu.extra_cycles <- cpu.extra_cycles + 513 + Bool.to_int (cpu.cycles % 2 = 1);
+
+  Memory.store cpu.memory address value
 
 let load_word cpu address =
   let a = load_byte cpu address in
