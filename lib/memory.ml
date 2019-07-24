@@ -1,7 +1,7 @@
 open Core
 
 type t = {
-  ppu : Ppu.ppu;
+  ppu : Ppu.t;
   mapper : Mapper.t;
   ram : int array;
 }

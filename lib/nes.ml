@@ -5,8 +5,8 @@ module Instructions = Instructions
 module Ppu = Ppu
 
 type t = {
-  cpu : Cpu.cpu;
-  ppu : Ppu.ppu;
+  cpu : Cpu.t;
+  ppu : Ppu.t;
   rom : Cartridge.rom;
 }
 
