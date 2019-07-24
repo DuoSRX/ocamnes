@@ -40,7 +40,9 @@ let event_loop ~nes ~window ~renderer ~texture =
   let cpu = nes.cpu in
   let ppu = nes.ppu in
   let e = Sdl.Event.create () in
+  let before = ref (Unix.gettimeofday ()) in
   let last_time = ref (Unix.gettimeofday ()) in
+  let target_fps = 1.0 /. 60.0 in
   let frame_count = ref 0 in
   let prev_frames = ref 0 in
   let do_quit = ref false in
@@ -58,7 +60,12 @@ let event_loop ~nes ~window ~renderer ~texture =
 
     if !prev_frames <> ppu.frames then (
       prev_frames := ppu.frames;
+
       let now = Unix.gettimeofday () in
+      let elapsed = now -. !before in
+      before := now;
+      if elapsed < target_fps then
+        Thread.delay (target_fps -. elapsed);
 
       if now >= (!last_time +. 1.0) then (
         ignore @@ Sdl.set_window_title window (sprintf "%d FPS - %d steps" !frame_count cpu.steps);

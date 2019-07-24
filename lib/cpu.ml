@@ -630,7 +630,7 @@ let execute_instruction cpu instruction =
 module Debugger = struct
   let breakpoints = ref (Int.Set.of_list [])
   let break_on_step = ref false
-  let break_after = ref (-1)
+  let break_after = ref (-2)
 
   let rec prompt cpu =
     print_string "(DEBUG) ";
