@@ -92,7 +92,6 @@ let main () =
   nes.cpu.pc <- Cpu.load_word nes.cpu 0xFFFC;
 
   Sdl.init Sdl.Init.(video + events) |> sdl_try;
-
   let flags = Sdl.Window.(shown + opengl + resizable) in
   let window = sdl_try @@ Sdl.create_window ~w:512 ~h:480 "Ocamnes" flags in
   let renderer = sdl_try @@ Sdl.create_renderer window ~flags:(Sdl.Renderer.(accelerated + presentvsync)) in
