@@ -114,6 +114,11 @@ let sprite_address ppu =
   | 0 -> 0
   | _ -> 0x1000
 
+let sprite_size ppu =
+  match ppu.registers.control land 0x20 with
+  | 0 -> 8
+  | _ -> 16
+
 let read_register ppu = function
   | 0x2001 -> (* PPUMASK *)
     ppu.registers.mask
@@ -255,8 +260,18 @@ let increment_y ppu =
 let sprite_pattern ppu ~tile ~row ~attrs =
   let vflip = attrs land 0x80 > 0 in
   let hflip = attrs land 0x40 > 0 in
-  let index = if vflip then 7 - row else row in
-  let address = sprite_address ppu + tile * 16 + index in
+
+  let address = if sprite_size ppu = 8 then (
+    let index = if vflip then 7 - row else row in
+    sprite_address ppu + tile * 16 + index
+  ) else (
+    let row = if vflip then 15 - row else row in
+    let offset = tile land 1 in
+    let tile = tile land 0xFE in
+    let (row, tile) = if row > 7 then (row - 8, tile + 1) else (row, tile) in
+    sprite_address ppu * offset + tile * 16 + row
+  ) in
+
   let lo = ref @@ load ppu address in
   let hi = ref @@ load ppu (address + 8) in
   let palette = (attrs land 3) lsl 2 in
@@ -282,14 +297,13 @@ let sprite_pattern ppu ~tile ~row ~attrs =
   !pattern
 
 let make_sprites ppu =
-  let height = 8 in (* TODO: 16px sprites 8 *)
+  let height = sprite_size ppu in
   let n = ref 0 in
   for i = 0 to 63 do
     let y = ppu.oam.(i * 4) in
     let x = ppu.oam.(i * 4 + 3) in
     let attrs = ppu.oam.(i * 4 + 2) in
     let tile = ppu.oam.(i * 4 + 1) in
-    (* let idx = ppu.oam.(i * 4 + 1) in *)
     let row = ppu.scanline - y in
     if row < 0 || row >= height then () else (
       if !n < 8 then (
