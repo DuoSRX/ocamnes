@@ -13,10 +13,23 @@ let logs = Array.create ~len:log_length ""
 (* let rom = load_rom "./roms/ice_climber.nes" *)
 (* let rom = load_rom "./roms/instr_test-v5/official_only.nes" *)
 (* let rom = load_rom "./roms/nestress.nes" *)
-(* let rom = load_rom "./roms/mario.nes" *)
+let rom = load_rom "./roms/mario.nes"
 (* let rom = load_rom "./roms/1942.nes" *)
 (* let rom = load_rom "./roms/megaman2.nes" *)
-let rom = load_rom "./roms/contra.nes"
+(* let rom = load_rom "./roms/contra.nes" *)
+
+let save_screenshot frame =
+  let rgb = new OImages.rgb24 256 240 in
+  for y = 0 to 239 do
+    for x = 0 to 255 do
+      let offset = (y * 256 + x) * 3 in
+      let r = frame.{offset} in
+      let g = frame.{offset+1} in
+      let b = frame.{offset+2} in
+      rgb#set x y {r;g;b}
+    done;
+  done;
+  rgb#save "./screenshot.png" (Some Images.Png) []
 
 let update_input keycode ~down = match keycode with
 | `Z -> Input.controller_state.a <- down
@@ -70,6 +83,7 @@ let event_loop ~nes ~window ~renderer ~texture =
           | `Quit -> do_quit := true
           | `Key_down when key_scancode e = `Escape -> do_quit := true
           | `Key_down when key_scancode e = `Space -> Debugger.break_on_step := true
+          | `Key_up when key_scancode e = `S -> save_screenshot nes.ppu.frame_content
           | `Key_up -> update_input ~down:false (key_scancode e)
           | `Key_down -> update_input ~down:true (key_scancode e)
           | _ -> ()
