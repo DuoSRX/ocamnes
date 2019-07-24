@@ -4,22 +4,19 @@ open Nes.Cpu
 open Nes.Cartridge
 open Tsdl
 
-let run_length = 10000000
 let log_length = 20
 let logs = Array.create ~len:log_length ""
-let term = ref false
 
-(* let rom = load_rom "./roms/ppu/palette_ram.nes" *)
-(* let rom = load_rom "./roms/instr_test-v5/rom_singles/03-immediate.nes" *)
-(* let rom = load_rom "./roms/instr_test-v5/rom_singles/02-implied.nes" *)
-(* let rom = load_rom "./roms/instr_test-v5/rom_singles/01-basics.nes" *)
-(* let rom = load_rom "./roms/nestress.nes" *)
-(* let rom = load_rom "./roms/nestest.nes" *)
-(* let rom = load_rom "./roms/color_test.nes" *)
 (* let rom = load_rom "./roms/donkey.nes" *)
-(* let rom = load_rom "./roms/mario.nes" *)
+(* let rom = load_rom "./roms/nestest.nes" *)
+(* let rom = load_rom "./roms/balloon_fight.nes" *)
 (* let rom = load_rom "./roms/ice_climber.nes" *)
-let rom = load_rom "./roms/balloon_fight.nes"
+(* let rom = load_rom "./roms/instr_test-v5/official_only.nes" *)
+(* let rom = load_rom "./roms/nestress.nes" *)
+(* let rom = load_rom "./roms/mario.nes" *)
+(* let rom = load_rom "./roms/1942.nes" *)
+(* let rom = load_rom "./roms/megaman2.nes" *)
+let rom = load_rom "./roms/contra.nes"
 
 let update_input keycode ~down = match keycode with
 | `Z -> Input.controller_state.a <- down
