@@ -17,18 +17,6 @@ let all_palettes = [|
     0xB5EBF2; 0xB8B8B8; 0x000000; 0x000000;
 |]
 
-module Registers = struct
-  type registers = {
-    mutable control : int; (* $2000 *)
-    mutable mask : int;    (* $2001 *)
-    mutable status : int;  (* $2002 *)
-    mutable oam : int;     (* $2003 *)
-  }
-  let make () = {
-    status = 0; control = 0; mask = 0; oam = 0;
-  }
-end
-
 type sprite = {
   pattern : int;
   position : int;
@@ -40,7 +28,6 @@ type ppu = {
   mutable cycles : int;
   mutable scanline : int;
   mutable frames : int;
-  mutable register : int;
 
   (* https://wiki.nesdev.com/w/index.php/NMI *)
   mutable nmi_occured : bool;
@@ -48,6 +35,11 @@ type ppu = {
   mutable nmi_triggered : bool;
   mutable nmi_previous : bool;
   mutable nmi_delay : int;
+
+  (* Registers *)
+  mutable control : int;  (* PPUCTRL   $2000 *)
+  mutable mask : int;     (* PPUMASK   $2001 *)
+  mutable oam_addr : int; (* OAMADDR   $2003 *)
 
   (* Temp stuff *)
   mutable tile_data : Uint64.t;
@@ -60,6 +52,7 @@ type ppu = {
   mutable sprites : sprite array;
   mutable sprite0_hit : bool;
   mutable sprite_overflow : bool;
+  mutable register : int; (* shift register when writing to other registers *)
 
   (* Internal registers *)
   mutable t : int;  (* temp vram address *)
@@ -69,7 +62,6 @@ type ppu = {
   mutable f : bool; (* Frame parity *)
 
   frame_content : (int, Bigarray.int8_unsigned_elt, Bigarray.c_layout) Bigarray.Array1.t;
-  registers: Registers.registers;
   oam: int array;
   vram : Vram.t
 }
@@ -77,7 +69,7 @@ type ppu = {
 let make ~vram = {
   cycles = 340; scanline = 240; frames = 0;
   t = 0; v = 0; x = 0; w = true; f = false;
-  registers = Registers.make ();
+  oam_addr = 0; mask = 0; control = 0;
   register = 0; sprite0_hit = false; sprite_overflow = false;
   nmi_occured = false; nmi_output = false; nmi_triggered = false; nmi_previous = false; nmi_delay = 0;
   sprite_count = 0; buffer = 0; sprites = Array.create ~len:8 {pattern=0;position=0;priority=0;index=0};
@@ -100,28 +92,28 @@ let nmi_change ppu =
 	ppu.nmi_previous <- nmi
 
 let address_increment ppu =
-  match ppu.registers.control land 0x4 with
+  match ppu.control land 0x4 with
   | 0 -> 1
   | _ -> 32
 
 let background_pattern_table_address ppu =
-  match ppu.registers.control land 0x10 with
+  match ppu.control land 0x10 with
   | 0 -> 0
   | _ -> 0x1000
 
 let sprite_address ppu =
-  match ppu.registers.control land 0x08 with
+  match ppu.control land 0x08 with
   | 0 -> 0
   | _ -> 0x1000
 
 let sprite_size ppu =
-  match ppu.registers.control land 0x20 with
+  match ppu.control land 0x20 with
   | 0 -> 8
   | _ -> 16
 
 let read_register ppu = function
   | 0x2001 -> (* PPUMASK *)
-    ppu.registers.mask
+    ppu.mask
   | 0x2002 -> (* PPUSTATUS *)
     let result = (ppu.register land 0x1F)
       lor (if ppu.nmi_occured then 0x80 else 0)
@@ -133,7 +125,7 @@ let read_register ppu = function
     ppu.w <- true;
     result
   | 0x2004 -> (* OAMDATA *)
-    ppu.oam.(ppu.registers.oam)
+    ppu.oam.(ppu.oam_addr)
   | 0x2007 -> (* PPUDATA *)
     let value = load ppu ppu.v in
     let value = if (ppu.v % 0x4000 < 0x3F00) then (
@@ -153,17 +145,17 @@ let write_register ppu register value =
   match register with
   | 0x2000 -> (* PPUCTRL *)
     ppu.nmi_output <- (value land 0x80) > 0;
-    ppu.registers.control <- value;
+    ppu.control <- value;
     nmi_change ppu;
     ppu.t <- (ppu.t land 0xF3FF) lor ((value land 0x3) lsl 10);
   | 0x2001 -> (* PPUMASK *)
-    ppu.registers.mask <- value
+    ppu.mask <- value
   | 0x2003 -> (* OAMADDR *)
-    ppu.registers.oam <- value
+    ppu.oam_addr <- value
   | 0x2004 -> (* OAMDATA *)
-    let address = ppu.registers.oam in
+    let address = ppu.oam_addr in
     ppu.oam.(address) <- value;
-    ppu.registers.oam <- (address + 1) % 0x100
+    ppu.oam_addr <- (address + 1) % 0x100
   | 0x2005 -> (* PPUSCROLL *)
     if ppu.w then (
       ppu.t <- (ppu.t land 0xFFE0) lor (value lsr 3);
@@ -189,8 +181,11 @@ let write_register ppu register value =
     ppu.v <- (ppu.v + address_increment ppu)
   | _ as r -> failwith @@ sprintf "Cannot write PPU Register @ %04X" r
 
-let show_sprites ppu = ppu.registers.mask land 0x10 > 0
-let show_background ppu = ppu.registers.mask land 0x08 > 0
+let show_sprites ppu =
+  ppu.mask land 0x10 > 0
+
+let show_background ppu =
+  ppu.mask land 0x08 > 0
 
 let load_nametable ppu =
   let address = 0x2000 lor (ppu.v land 0xFFF) in
