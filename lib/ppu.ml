@@ -213,18 +213,15 @@ let load_high_byte ppu =
   ppu.high_byte <- load ppu (address + 8)
 
 let store_tile_data ppu =
-  let data = ref 0 in
-  for _n = 1 to 8 do
-    let a = ppu.attr_table_b in
+  let rec aux n data =
     let p1 = (ppu.low_byte land 0x80) lsr 7 in
     let p2 = (ppu.high_byte land 0x80) lsr 6 in
     ppu.low_byte <- (ppu.low_byte lsl 1);
     ppu.high_byte <- (ppu.high_byte lsl 1);
-    data := !data lsl 4;
-    let res = a lor p1 lor p2 in
-    data := !data lor res;
-  done;
-  ppu.tile_data <- Uint64.logor ppu.tile_data (Uint64.of_int !data)
+    let data = (data lsl 4) lor ppu.attr_table_b lor p1 lor p2 in
+    if n > 0 then aux (n - 1) data else data
+  in
+  ppu.tile_data <- Uint64.logor ppu.tile_data (aux 7 0 |> Uint64.of_int )
 
 let fetch_data ppu =
   ppu.tile_data <- Uint64.shift_left ppu.tile_data 4;
@@ -271,30 +268,26 @@ let sprite_pattern ppu ~tile ~row ~attrs =
     let (row, tile) = if row > 7 then (row - 8, tile + 1) else (row, tile) in
     sprite_address ppu * offset + tile * 16 + row
   ) in
-
   let lo = ref @@ load ppu address in
   let hi = ref @@ load ppu (address + 8) in
   let palette = (attrs land 3) lsl 2 in
-  let pattern = ref 0 in
-  for _ = 1 to 8 do
-    (* TODO: Remove duplication here *)
-    if hflip then (
+
+  let rec aux n pattern =
+    let pattern = if hflip then (
       let plane0 = (!lo land 0x1) in
       let plane1 = (!hi land 0x1) lsl 1 in
       lo := !lo lsr 1;
       hi := !hi lsr 1;
-      pattern := !pattern lsl 4;
-      pattern := !pattern lor (palette lor plane0 lor plane1)
+      (pattern lsl 4) lor (palette lor plane0 lor plane1)
     ) else (
       let plane0 = (!lo land 0x80) lsr 7 in
       let plane1 = (!hi land 0x80) lsr 6 in
       lo := !lo lsl 1;
       hi := !hi lsl 1;
-      pattern := !pattern lsl 4;
-      pattern := !pattern lor (palette lor plane0 lor plane1)
-    )
-  done;
-  !pattern
+      (pattern lsl 4) lor (palette lor plane0 lor plane1)
+    ) in
+    if n > 0 then aux (n - 1) pattern else pattern
+  in aux 7 0
 
 let make_sprites ppu =
   let height = sprite_size ppu in
