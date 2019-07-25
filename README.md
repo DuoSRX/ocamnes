@@ -21,10 +21,12 @@ Currently passes the Nestest suite up to unofficial opcodes.
 * Donkey kong
 * Balloon fight
 * Lode runner
+* Contra
+* Gradius
 
 ## TODO
 
-* Mappers (only NROM/UxROM are supported)
+* Mappers (only NROM/UxROM/CNROM are supported)
 * PPU
   * Special flags to stop rendering sprites at the edge
 * IRQ (Not sure if they're used anywhere)
@@ -33,6 +35,5 @@ Currently passes the Nestest suite up to unofficial opcodes.
 * Unofficial opcodes
 * Load/Save state
 * Better debugger and logging
-* Resize window
 * Remap controls
 * CLI args
