@@ -7,7 +7,7 @@ let logs = Array.create ~len:10 ""
 let log_length = 10
 
 let trace cpu instruction opcode =
-  let str_op = Instructions.show_instruction instruction.op in
+  let str_op = Instructions.show instruction.op in
   let instr = sprintf "%s %s" str_op (args_to_string cpu instruction) in
   (* Horrible hack to comform to Nestest output logs... *)
   let instr2 = if (instruction.op = NOP) && opcode <> 0xEA then sprintf "*%s " instr else sprintf " %s" instr in

@@ -18,7 +18,7 @@ let rom = load_rom "./roms/mario.nes"
 (* let rom = load_rom "./roms/megaman2.nes" *)
 (* let rom = load_rom "./roms/contra.nes" *)
 
-let save_screenshot frame =
+let save_screenshot ?(filename="./screenshot.jpg") frame =
   let rgb = new OImages.rgb24 256 240 in
   for y = 0 to 239 do
     for x = 0 to 255 do
@@ -29,7 +29,7 @@ let save_screenshot frame =
       rgb#set x y {r;g;b}
     done;
   done;
-  rgb#save "./screenshot.png" (Some Images.Png) []
+  rgb#save filename (Some Images.Png) []
 
 let update_input keycode ~down = match keycode with
 | `Z -> Input.controller_state.a <- down
@@ -82,7 +82,7 @@ let event_loop ~nes ~window ~renderer ~texture =
         match Sdl.Event.(enum (get e typ)) with
           | `Quit -> do_quit := true
           | `Key_down when key_scancode e = `Escape -> do_quit := true
-          | `Key_down when key_scancode e = `Space -> Debugger.break_on_step := true
+          | `Key_down when key_scancode e = `Apostrophe -> Debugger.break_on_step := true
           | `Key_up when key_scancode e = `S -> save_screenshot nes.ppu.frame_content
           | `Key_up -> update_input ~down:false (key_scancode e)
           | `Key_down -> update_input ~down:true (key_scancode e)
