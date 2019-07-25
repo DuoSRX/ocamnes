@@ -39,6 +39,28 @@ module UxROM = struct
     }
 end
 
+module CNRom = struct
+  let bank = ref 0
+
+  let load (rom : Cartridge.rom) address =
+    if address > 0x2000 then
+      rom.prg.(address land (rom.headers.prg_size - 1))
+    else
+      rom.chr.(!bank * 0x2000 + address)
+
+  let store (rom : Cartridge.rom) address value =
+    if address < 0x2000 then
+      rom.chr.(address) <- value
+    else
+      bank := value land 3
+
+  let make (rom : Cartridge.rom) =
+    { rom = rom
+    ; load = load rom
+    ; store = store rom
+    }
+end
+
 module NRom = struct
   let load (rom : Cartridge.rom) address =
     if address < 0x2000 then
@@ -46,10 +68,7 @@ module NRom = struct
     else if address >= 0x6000 && address < 0x8000 then
       rom.ram.(address)
     else
-      if rom.headers.prg_size > 0x4000 then
-        rom.prg.(address land 0x7FFF)
-      else
-        rom.prg.(address land 0x3FFF)
+      rom.prg.(address land (rom.headers.prg_size - 1))
 
   let store (rom : Cartridge.rom) address value =
     if address < 0x2000 then
@@ -70,4 +89,5 @@ let mapper_for ~(rom:Cartridge.rom) =
   match rom.headers.mapper with
   | 0 -> NRom.make rom
   | 2 -> UxROM.make rom
+  | 3 -> CNRom.make rom
   | n -> failwith @@ sprintf "Unknwown mapper: %d" n
