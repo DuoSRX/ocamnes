@@ -13,7 +13,7 @@ Currently passes the Nestest suite up to unofficial opcodes.
 * Return -> Start
 * Left Shift -> Select
 * S -> Saves a screenshot as `screenshot.png`
-* Space -> Start the debugger
+* Apostrophe -> Start the debugger
 
 ## Games running mostly glitch-less:
 
