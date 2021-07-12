@@ -1,0 +1,157 @@
+ffmpeg -framerate 1 -pattern_type glob -i '*.png' -c:v libx264 -r 30 -pix_fmt yuv420p out.mp4
+ffmpeg -framerate 30 -pattern_type glob -i '*.png' -c:v libx264 -pix_fmt yuv420p out.mp4
+
+ffmpeg -framerate 30 -i foo-%03d.png out.mp4
+ffmpeg -framerate 30 -pattern_type glob -i '*.png' -c:v libx264 -pix_fmt yuv420p out.mp4
+
+          | `Key_up when key_scancode e = `R ->
+      if !Recorder.recording then Recorder.add nes.ppu.frame_content;
+            if !Recorder.recording then (
+              Recorder.recording := false;
+              Recorder.render ();
+            )
+            else
+              Recorder.recording := true
+
+let frame_to_image frame =
+  let image = new OImages.rgb24 256 240 in
+  for y = 0 to 239 do
+    for x = 0 to 255 do
+      let offset = (y * 256 + x) * 3 in
+      let r = frame.{offset} in
+      let g = frame.{offset+1} in
+      let b = frame.{offset+2} in
+      image#set x y {r;g;b}
+    done;
+  done;
+  image
+
+module Recorder = struct
+  let recording = ref false
+  let frames = ref []
+
+  let add frame =
+    frames := List.cons (frame_to_image frame) !frames
+
+  let render () =
+    List.rev !frames |> List.iteri ~f:(fun i frame ->
+      let filename = sprintf "./gifs/foo-%d.png" i in
+      frame#save filename (Some Images.Png) []
+    );
+    frames := [];
+    ignore @@ Sys.command "yes | ffmpeg -r 30 -framerate 30 -pattern_type glob -i './gifs/*.png' -c:v libx264 -pix_fmt yuv420p out.mp4";
+    ignore @@ Sys.command "rm -r ./gifs/*.png";
+end
+
+
+module MMC1 = struct
+  let control = ref 0xC
+  let writes = ref 0
+  let accumulator = ref 0
+  let chr_bank_0 = ref 0
+  let chr_bank_1 = ref 0
+  let prg_bank = ref 0
+
+  let load (rom : Cartridge.rom) address =
+    if address < 0x2000 then
+      rom.chr.(address)
+    else if address < 0x8000 then
+      0
+    else if address < 0xC000 then
+      let bank = match (!control lsr 2) land 3 with
+      | 0 | 1 -> !prg_bank land 0xFE (* SWITCH 32 *)
+      | 2     -> 0                   (* FIX FIRST *)
+      | 3     -> !prg_bank           (* FIX LAST *)
+      | _ -> failwith "unreachable"
+      in
+      (* printf "%04X - Bank %04X - Target %04X" address bank ((bank * 0x4000) lor (address land 0x3FFF)); *)
+      rom.prg.((bank * 0x4000) lor (address land 0x3FFF))
+    else
+      let bank = match (!control lsr 2) land 3 with
+      | 0 | 1 -> (!prg_bank land 0xFE) lor 1 (* SWITCH 32 *)
+      | 2     -> !prg_bank                   (* FIX FIRST *)
+      | 3     -> (rom.headers.prg_size / 0x4000) - 1    (* FIX LAST *)
+      | _ -> failwith "unreachable"
+      in
+      rom.prg.((bank * 0x4000) lor (address land 0x3FFF))
+
+  let store_prg address value =
+    if value land 0x80 <> 0 then (
+      writes := 0;
+      accumulator := 0;
+      control := !control lor 0xC
+    ) else (
+      accumulator := !accumulator lor ((value land 1) lsl !writes);
+      writes := !writes + 1;
+      if !writes = 5 then (
+        writes := 0;
+        if address <= 0x9FFF then
+          control := !accumulator
+        else if address <= 0xBFFF then
+          chr_bank_0 := !accumulator
+        else if address <= 0xDFFF then
+          chr_bank_1 := !accumulator
+        else
+          prg_bank := !accumulator
+      );
+      accumulator := 0
+    )
+
+  let store (rom : Cartridge.rom) address value =
+    if address < 0x2000 then
+      rom.chr.(address) <- value
+    else if address < 0x8000 then
+      ()
+    else
+      store_prg address value
+end
+
+let mmc1 rom =
+  { rom = rom
+  ; load = (MMC1.load rom)
+  ; store = (MMC1.store rom)
+  }
+
+(* Is this really worse than lock texture?? *)
+(* let (pixels, _pitch) = sdl_try @@ Sdl.lock_texture texture None Bigarray.int8_unsigned in
+Bigarray.Array1.blit cpu.ppu.frame_content pixels; *)
+Sdl.update_texture texture None cpu.ppu.frame_content (256 * 3) |> sdl_try;
+(* Sdl.unlock_texture texture; *)
+Sdl.render_clear renderer |> sdl_try;
+Sdl.render_copy renderer texture |> sdl_try;
+Sdl.render_present renderer;
+Out_channel.flush stdout;
+
+let rec bits x =
+  if x = 0 then ""
+  else bits (x lsr 1) ^ (if x mod 2 = 0 then "0" else "1")
+
+let base_nametable_address ppu =
+  match ppu.registers.control land 0x3 with
+  | 0 -> 0x2000
+  | 1 -> 0x2400
+  | 2 -> 0x2800
+  | 3 -> 0x2C00
+  | _ -> failwith "unreachable"
+
+| `Key_down when key_scancode e = `Apostrophe -> (
+  let target = Sdl.get_render_target renderer in
+  let _ = Sdl.set_render_target renderer (Some texture) in
+  match Sdl.query_texture texture with
+  | Ok (_, _, (w, h)) -> (
+    match Sdl.create_rgb_surface ~w:w ~h:h ~depth:32 0l 0l 0l 0l with
+    | Ok surface -> (
+      let sformat = Sdl.get_surface_format_enum surface in
+      Sdl.get_pixel_format_name sformat |> print_endline;
+      let pitch = Sdl.get_surface_pitch surface in
+      let pixels = Sdl.get_surface_pixels surface Bigarray.int in
+      (* let _ = Sdl.render_read_pixels renderer None (Some Sdl.Pixel.format_rgb24) pixels pitch in *)
+      let _ = Sdl.render_read_pixels renderer None (Some sformat) pixels pitch in
+      let _ = Sdl.save_bmp surface "./blah.bmp" in
+      ignore @@ Sdl.free_surface surface;
+      ignore @@ Sdl.set_render_target renderer target
+    )
+    | _ -> ()
+  )
+  | _ -> ();
+)
