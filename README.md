@@ -24,6 +24,12 @@ Currently passes the Nestest suite up to unofficial opcodes.
 * Contra
 * Gradius
 
+## How to build
+
+* `dune build`
+* `opam install . --deps-only`
+* `dune exec ./bin/main.exe`
+
 ## TODO
 
 * Mappers (only NROM/UxROM/CNROM are supported)
