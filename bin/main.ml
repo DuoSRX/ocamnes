@@ -7,18 +7,12 @@ open Tsdl
 let log_length = 20
 let logs = Array.create ~len:log_length ""
 
-(* let rom = load_rom "./roms/donkey.nes" *)
+let rom = load_rom "./roms/donkey.nes"
 (* let rom = load_rom "./roms/nestest.nes" *)
-(* let rom = load_rom "./roms/balloon_fight.nes" *)
-(* let rom = load_rom "./roms/ice_climber.nes" *)
-(* let rom = load_rom "./roms/instr_test-v5/official_only.nes" *)
 (* let rom = load_rom "./roms/nestress.nes" *)
-let rom = load_rom "./roms/mario.nes"
-(* let rom = load_rom "./roms/1942.nes" *)
-(* let rom = load_rom "./roms/megaman2.nes" *)
 (* let rom = load_rom "./roms/contra.nes" *)
 
-let save_screenshot ?(filename="./screenshot.jpg") frame =
+(* let save_screenshot ?(filename="./screenshot.jpg") frame =
   let rgb = new OImages.rgb24 256 240 in
   for y = 0 to 239 do
     for x = 0 to 255 do
@@ -29,7 +23,7 @@ let save_screenshot ?(filename="./screenshot.jpg") frame =
       rgb#set x y {r;g;b}
     done;
   done;
-  rgb#save filename (Some Images.Png) []
+  rgb#save filename (Some Images.Png) [] *)
 
 let update_input keycode ~down = match keycode with
 | `Z -> Input.controller_state.a <- down
@@ -55,7 +49,7 @@ let render ~texture ~renderer ~pixels =
 let event_loop ~nes ~window ~renderer ~texture =
   let e = Sdl.Event.create () in
   let frame_count = ref 0 in
-  let ticks = ref (Sdl.get_ticks () |> Int32.to_float) in
+  let ticks = ref (Sdl.get_ticks () |> Int32.to_int_exn) in
   let prev_frames = ref 0 in
   let do_quit = ref false in
 
@@ -65,8 +59,8 @@ let event_loop ~nes ~window ~renderer ~texture =
     if !prev_frames <> nes.ppu.frames then (
       prev_frames := nes.ppu.frames;
 
-      let now = Sdl.get_ticks () |> Int32.to_float in
-      if now >= (!ticks +. 1000.0) then (
+      let now = Sdl.get_ticks () |> Int32.to_int_exn in
+      if now >= (!ticks + 1000) then (
         ignore @@ Sdl.set_window_title window (sprintf "%d FPS" !frame_count);
         frame_count := 0;
         ticks := now;
@@ -81,11 +75,11 @@ let event_loop ~nes ~window ~renderer ~texture =
       while Sdl.poll_event (Some e) do
         match Sdl.Event.(enum (get e typ)) with
           | `Quit -> do_quit := true
-          | `Key_down when key_scancode e = `Escape -> do_quit := true
-          | `Key_down when key_scancode e = `Apostrophe -> Debugger.break_on_step := true
-          | `Key_up when key_scancode e = `S -> save_screenshot nes.ppu.frame_content
+          | `Key_down -> (match key_scancode e with
+            | `Escape -> do_quit := true
+            | `Apostrophe -> Debugger.break_on_step := true
+            | _ -> update_input ~down:true (key_scancode e))
           | `Key_up -> update_input ~down:false (key_scancode e)
-          | `Key_down -> update_input ~down:true (key_scancode e)
           | _ -> ()
       done;
     );

@@ -1,4 +1,5 @@
 open Core
+open Core_compat.Interval_lib
 open Instructions
 module Cartridge = Cartridge
 module Cpu = Cpu
