@@ -1,7 +1,7 @@
 (executable
  (name      main)
  (modules main)
- (libraries core core_compat nes tsdl stdint)
+ (libraries core core_compat nes tsdl stdint camlimages.core camlimages.png)
  (preprocess
   (pps ppx_deriving.std)))
 

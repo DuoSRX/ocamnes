@@ -10,7 +10,7 @@ let trace cpu instruction opcode =
   let str_op = Instructions.show instruction.op in
   let instr = sprintf "%s %s" str_op (args_to_string cpu instruction) in
   (* Horrible hack to comform to Nestest output logs... *)
-  let instr2 = if (instruction.op = NOP) && opcode <> 0xEA then sprintf "*%s " instr else sprintf " %s" instr in
+  let instr2 = if (phys_equal instruction.op Instructions.NOP) && opcode <> 0xEA then sprintf "*%s " instr else sprintf " %s" instr in
   let args = args_to_hex_string cpu instruction in
   let cy = cpu.cycles * 3 mod 341 in
   let status = sprintf "A:%02X X:%02X Y:%02X P:%02X SP:%02X CYC:%3d" cpu.a cpu.x cpu.y (flags_to_int cpu) cpu.s cy in

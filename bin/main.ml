@@ -4,11 +4,9 @@ open Nes.Cpu
 open Nes.Cartridge
 open Tsdl
 
-let log_length = 20
-let logs = Array.create ~len:log_length ""
-
-(* TODO The latest version of OImages is broken. Fix this later *)
-(* let save_screenshot ?(filename="./screenshot.jpg") frame =
+(* TODO Append and increment a counter for multiple screenshots *)
+(* TODO Save animated gifs *)
+let save_screenshot ?(filename="./screenshot.png") frame =
   let rgb = new OImages.rgb24 256 240 in
   for y = 0 to 239 do
     for x = 0 to 255 do
@@ -19,7 +17,7 @@ let logs = Array.create ~len:log_length ""
       rgb#set x y {r;g;b}
     done;
   done;
-  rgb#save filename (Some Images.Png) [] *)
+  rgb#save filename (Some Images.Png) []
 
 let update_input keycode ~down = match keycode with
 | `Z -> Input.controller_state.a <- down
@@ -74,6 +72,7 @@ let event_loop ~nes ~window ~renderer ~texture =
           | `Key_down -> (match key_scancode e with
             | `Escape -> do_quit := true
             | `Apostrophe -> Debugger.break_on_step := true
+            | `S -> save_screenshot nes.ppu.frame_content
             | _ -> update_input ~down:true (key_scancode e))
           | `Key_up -> update_input ~down:false (key_scancode e)
           | _ -> ()
