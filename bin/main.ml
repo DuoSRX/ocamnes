@@ -7,11 +7,7 @@ open Tsdl
 let log_length = 20
 let logs = Array.create ~len:log_length ""
 
-let rom = load_rom "./roms/donkey.nes"
-(* let rom = load_rom "./roms/nestest.nes" *)
-(* let rom = load_rom "./roms/nestress.nes" *)
-(* let rom = load_rom "./roms/contra.nes" *)
-
+(* TODO The latest version of OImages is broken. Fix this later *)
 (* let save_screenshot ?(filename="./screenshot.jpg") frame =
   let rgb = new OImages.rgb24 256 240 in
   for y = 0 to 239 do
@@ -86,6 +82,8 @@ let event_loop ~nes ~window ~renderer ~texture =
   done
 
 let main () =
+  let rom = (Sys.get_argv()).(1) |> load_rom in
+
   let nes = Nes.make rom ~tracing:false in
   nes.cpu.pc <- Cpu.load_word nes.cpu 0xFFFC;
 
