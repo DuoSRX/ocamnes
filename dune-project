@@ -9,14 +9,17 @@
 (package
  (name ocamnes)
  (synopsis "NES Emulator")
- (description "")
+ (description "An NES emulator written in OCaml")
+ (authors "Xavier Perez <duosrx@gmail.com>")
+ (homepage "https://github.com/DuoSRX/ocamnes")
+ (bug_reports "https://github.com/DuoSRX/ocamnes/issues")
+ (license "MIT")
  (allow_empty)
  (depends
   (core
-   (>= 0.16.0))
-  core_compat
+   (>= 0.17.0))
   ppx_deriving
   tsdl
   stdint
-  camlimages
-  ounit))
+  imagelib
+  ounit2))

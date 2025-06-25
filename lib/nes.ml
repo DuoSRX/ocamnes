@@ -1,5 +1,4 @@
 open Core
-open Core_compat.Interval_lib
 open Instructions
 module Cartridge = Cartridge
 module Cpu = Cpu
@@ -117,8 +116,7 @@ module Debugger = struct
       printf "%02X\n" (Cpu.load_byte cpu (Int.of_string addr));
       prompt nes
     | "byte" :: a :: b :: [] ->
-      Interval.Int.create (Int.of_string a) (Int.of_string b)
-      |> Interval.Int.to_list
+      List.range (Int.of_string a) (Int.of_string b)
       |> List.map ~f:(Cpu.load_byte cpu)
       |> List.iter ~f:(printf "%02X ");
       print_endline "";
@@ -127,8 +125,7 @@ module Debugger = struct
       printf "%02X\n" (Ppu.load ppu (Int.of_string addr));
       prompt nes
     | "ppu" :: a :: b :: [] ->
-      Interval.Int.create (Int.of_string a) (Int.of_string b)
-      |> Interval.Int.to_list
+      List.range (Int.of_string a) (Int.of_string b)
       |> List.map ~f:(Ppu.load ppu)
       |> List.iter ~f:(printf "%02X ");
       print_endline "";

@@ -3,21 +3,23 @@ open Nes
 open Nes.Cpu
 open Nes.Cartridge
 open Tsdl
+open ImageLib
 
 (* TODO Append and increment a counter for multiple screenshots *)
 (* TODO Save animated gifs *)
 let save_screenshot ?(filename="./screenshot.png") frame =
-  let rgb = new OImages.rgb24 256 240 in
+  let img = Image.create_rgb 256 240 in
   for y = 0 to 239 do
     for x = 0 to 255 do
       let offset = (y * 256 + x) * 3 in
-      let r = frame.{offset} in
-      let g = frame.{offset+1} in
-      let b = frame.{offset+2} in
-      rgb#set x y {r;g;b}
+      let r = Int.to_int frame.{offset} in
+      let g = Int.to_int frame.{offset+1} in
+      let b = Int.to_int frame.{offset+2} in
+      Image.write_rgb img x y r g b
     done;
   done;
-  rgb#save filename (Some Images.Png) []
+  let writer = ImageUtil_unix.chunk_writer_of_path filename in
+  PNG.write writer img
 
 let update_input keycode ~down = match keycode with
 | `Z -> Input.controller_state.a <- down
