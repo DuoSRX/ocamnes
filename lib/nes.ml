@@ -1,5 +1,6 @@
 open Core
 open Instructions
+module Apu = Apu
 module Cartridge = Cartridge
 module Cpu = Cpu
 module Input = Input

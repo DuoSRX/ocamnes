@@ -1,9 +1,39 @@
 open Core
 open Nes
+open Nes.Apu
 open Nes.Cpu
 open Nes.Cartridge
 open Tsdl
 open ImageLib
+
+let sample_rate = 44100
+let buffer_size = 512
+
+(* let audio_buffer = Array.create ~len:buffer_size 0 *)
+
+(* let pulse = {
+  enabled = true;
+  duty_cycle = 2;     (* 50% *)
+  timer = 20;         (* Determines pitch *)
+  timer_counter = 20;
+  sequence_index = 0;
+  volume = 15;
+}
+
+let set_int16_le buf pos v =
+  Bytes.set buf pos (Char.of_int_exn (v land 0xFF));
+  Bytes.set buf (pos + 1) (Char.of_int_exn ((v lsr 8) land 0xFF)) *)
+
+(* ('a, 'b) Bigarray.kind -> (('a, 'b) bigarray -> unit) -> audio_callback *)
+(* let fill_audio _userdata stream len =
+  let samples = len / 2 in (* 16-bit audio *)
+  for i = 0 to samples - 1 do
+    for _ = 0 to (sample_rate / 1789773) - 1 do
+      tick_pulse pulse
+    done;
+    let sample = (pulse_sample pulse * 2048) in
+    set_int16_le stream (i * 2) sample
+  done *)
 
 let next_screenshot_filename () =
   let rec aux counter =
@@ -96,7 +126,26 @@ let main () =
   let nes = Nes.make rom ~tracing:false in
   nes.cpu.pc <- Cpu.load_word nes.cpu 0xFFFC;
 
-  Sdl.init Sdl.Init.(video + events) |> sdl_try;
+  Sdl.init Sdl.Init.(video + events + audio) |> sdl_try;
+
+  let desired =
+    { Sdl.as_freq = sample_rate;
+      Sdl.as_format = Sdl.Audio.s32;
+      Sdl.as_channels = 1;
+      Sdl.as_samples = buffer_size;
+      Sdl.as_silence = 0;
+      Sdl.as_size = 0l;
+      Sdl.as_callback = None; }
+  in
+
+  match Sdl.open_audio_device None false desired 0 with
+  | Error _e -> failwith "oh no"
+  | Ok (dev, _) ->
+    Sdl.pause_audio_device dev false;
+    while true do
+      Sdl.delay 1000l
+    done;
+
   let flags = Sdl.Window.(shown + opengl + resizable) in
   let window = sdl_try @@ Sdl.create_window ~w:512 ~h:480 "Ocamnes" flags in
   let renderer = sdl_try @@ Sdl.create_renderer window ~flags:(Sdl.Renderer.(accelerated + presentvsync)) in

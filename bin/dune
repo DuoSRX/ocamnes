@@ -2,6 +2,7 @@
  (name      main)
  (modules main)
  (libraries core nes tsdl stdint imagelib.unix)
+ (flags (:standard -warn-error -a))
  (preprocess
   (pps ppx_deriving.std)))
 
