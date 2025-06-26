@@ -5,9 +5,17 @@ open Nes.Cartridge
 open Tsdl
 open ImageLib
 
-(* TODO Append and increment a counter for multiple screenshots *)
+let next_screenshot_filename () =
+  let rec aux counter =
+    let filename = "screenshot" ^ string_of_int counter ^ ".png" in
+    match Sys_unix.file_exists filename with
+    | `Yes -> aux (counter + 1)
+    | _ -> filename
+  in
+  aux 0
+
 (* TODO Save animated gifs *)
-let save_screenshot ?(filename="./screenshot.png") frame =
+let save_screenshot frame =
   let img = Image.create_rgb 256 240 in
   for y = 0 to 239 do
     for x = 0 to 255 do
@@ -18,7 +26,7 @@ let save_screenshot ?(filename="./screenshot.png") frame =
       Image.write_rgb img x y r g b
     done;
   done;
-  let writer = ImageUtil_unix.chunk_writer_of_path filename in
+  let writer = ImageUtil_unix.chunk_writer_of_path @@ next_screenshot_filename () in
   PNG.write writer img
 
 let update_input keycode ~down = match keycode with
