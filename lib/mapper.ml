@@ -1,5 +1,3 @@
-open Core
-
 type t = {
   rom : Cartridge.rom;
   load : int -> int;
@@ -27,7 +25,7 @@ module UxROM = struct
     else if address >= 0x6000 && address < 0x8000 then
       rom.ram.(address - 0x6000) <- value
     else
-      bank1 := value % !banks
+      bank1 := value mod !banks
 
   let make (rom : Cartridge.rom) =
     banks := rom.headers.prg_size / 0x4000;
@@ -76,7 +74,7 @@ module NRom = struct
     else if address >= 0x6000 && address < 0x8000 then
       rom.ram.(address - 0x6000) <- value
     else
-      failwith @@ sprintf "Can't store to PRG @ %04X = %02X" address value
+      failwith @@ Printf.sprintf "Can't store to PRG @ %04X = %02X" address value
 
   let make (rom : Cartridge.rom) =
     { rom = rom
@@ -90,4 +88,4 @@ let mapper_for ~(rom:Cartridge.rom) =
   | 0 -> NRom.make rom
   | 2 -> UxROM.make rom
   | 3 -> CNRom.make rom
-  | n -> failwith @@ sprintf "Unknwown mapper: %d" n
+  | n -> failwith @@ Printf.sprintf "Unknwown mapper: %d" n

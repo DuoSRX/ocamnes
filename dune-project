@@ -16,8 +16,7 @@
  (license "MIT")
  (allow_empty)
  (depends
-  (core
-   (>= 0.17.0))
+  containers
   ppx_deriving
   tsdl
   stdint

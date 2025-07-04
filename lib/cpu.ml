@@ -1,4 +1,3 @@
-open Core
 open Instructions
 
 module Flags = struct
@@ -55,7 +54,7 @@ let load_byte cpu address =
 
 let store_byte cpu address value =
   if address = 0x4014 then (* Extra cycles for DMA *)
-    cpu.extra_cycles <- cpu.extra_cycles + 513 + Bool.to_int (cpu.cycles % 2 = 1);
+    cpu.extra_cycles <- cpu.extra_cycles + 513 + Bool.to_int (cpu.cycles mod 2 = 1);
 
   Memory.store cpu.memory address value
 
@@ -485,7 +484,7 @@ let decode opcode =
   | 0xF9 -> (SBC, AbsoluteY, 4, 0)
   | 0xFD -> (SBC, AbsoluteX, 4, 0)
   | 0xFE -> (INC, AbsoluteX, 7, 0)
-  | _ -> failwith @@ sprintf "Unknown opcode %02X" opcode
+  | _ -> failwith @@ Printf.sprintf "Unknown opcode %02X" opcode
 
 let decode_instruction cpu instruction =
   let (op, mode, cycles, extra_page_cycles) = decode instruction in
@@ -524,8 +523,8 @@ let execute_instruction cpu instruction =
   | INC -> inc cpu args target
   | INX -> inx cpu
   | INY -> iny cpu
-  | JMP -> jmp cpu (Option.value_exn target)
-  | JSR -> jsr cpu (Option.value_exn target)
+  | JMP -> jmp cpu (Option.get target)
+  | JSR -> jsr cpu (Option.get target)
   | LDA -> lda cpu args
   | LDX -> ldx cpu args
   | LDY -> ldy cpu args
@@ -544,9 +543,9 @@ let execute_instruction cpu instruction =
   | SEC -> cpu.carry <- true
   | SED -> cpu.decimal <- true
   | SEI -> cpu.interrupt <- true
-  | STA -> sta cpu (Option.value_exn target)
-  | STX -> stx cpu (Option.value_exn target)
-  | STY -> sty cpu (Option.value_exn target)
+  | STA -> sta cpu (Option.get target)
+  | STX -> stx cpu (Option.get target)
+  | STY -> sty cpu (Option.get target)
   | TAX -> tax cpu
   | TAY -> tay cpu
   | TSX -> tsx cpu

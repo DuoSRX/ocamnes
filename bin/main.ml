@@ -1,4 +1,3 @@
-open Core
 open Nes
 open Nes.Cpu
 open Nes.Cartridge
@@ -8,9 +7,7 @@ open ImageLib
 let next_screenshot_filename () =
   let rec aux counter =
     let filename = "screenshot" ^ string_of_int counter ^ ".png" in
-    match Sys_unix.file_exists filename with
-    | `Yes -> aux (counter + 1)
-    | _ -> filename
+    if Sys.file_exists filename then aux (counter + 1) else filename
   in
   aux 0
 
@@ -20,9 +17,9 @@ let save_screenshot frame =
   for y = 0 to 239 do
     for x = 0 to 255 do
       let offset = (y * 256 + x) * 3 in
-      let r = Int.to_int frame.{offset} in
-      let g = Int.to_int frame.{offset+1} in
-      let b = Int.to_int frame.{offset+2} in
+      let r = frame.{offset} in
+      let g = frame.{offset+1} in
+      let b = frame.{offset+2} in
       Image.write_rgb img x y r g b
     done;
   done;
@@ -53,19 +50,19 @@ let render ~texture ~renderer ~pixels =
 let event_loop ~nes ~window ~renderer ~texture =
   let e = Sdl.Event.create () in
   let frame_count = ref 0 in
-  let ticks = ref (Sdl.get_ticks () |> Int32.to_int_exn) in
+  let ticks = ref (Sdl.get_ticks () |> Int32.to_int) in
   let prev_frames = ref 0 in
   let do_quit = ref false in
 
   while not !do_quit do
-    Nes.step nes |> Option.iter ~f:print_endline;
+    Nes.step nes |> Option.iter print_endline;
 
     if !prev_frames <> nes.ppu.frames then (
       prev_frames := nes.ppu.frames;
 
-      let now = Sdl.get_ticks () |> Int32.to_int_exn in
+      let now = Sdl.get_ticks () |> Int32.to_int in
       if now >= (!ticks + 1000) then (
-        ignore @@ Sdl.set_window_title window (sprintf "%d FPS" !frame_count);
+        ignore @@ Sdl.set_window_title window (Printf.sprintf "%d FPS" !frame_count);
         frame_count := 0;
         ticks := now;
       ) else (
@@ -91,7 +88,7 @@ let event_loop ~nes ~window ~renderer ~texture =
   done
 
 let main () =
-  let rom = (Sys.get_argv()).(1) |> load_rom in
+  let rom = (Sys.argv).(1) |> load_rom in
 
   let nes = Nes.make rom ~tracing:false in
   nes.cpu.pc <- Cpu.load_word nes.cpu 0xFFFC;

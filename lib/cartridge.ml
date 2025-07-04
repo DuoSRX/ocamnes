@@ -1,5 +1,3 @@
-open Core
-
 type mirroring = Vertical | Horizontal
   [@@deriving show { with_path = false }]
 
@@ -18,10 +16,11 @@ type rom = {
 } [@@deriving show]
 
 let open_file name =
-  name
-  |> In_channel.read_all
-  |> String.to_array
-  |> Array.map ~f:Char.to_int
+  let ic = open_in name in
+  let len = in_channel_length ic in
+  let s = really_input_string ic len in
+  close_in ic;
+  Array.init len (fun i -> Char.code s.[i])
 
 let load_headers rom =
   {
@@ -34,19 +33,19 @@ let load_headers rom =
 let load_rom path =
   let rom = open_file path in
   let headers = load_headers rom in
-  printf "Loaded rom %s\n" path;
-  printf "PRG:%04x CHR:%04x Mirroring:%s Mapper:%d\n"
+  Printf.printf "Loaded rom %s\n" path;
+  Printf.printf "PRG:%04x CHR:%04x Mirroring:%s Mapper:%d\n"
     headers.prg_size headers.chr_size (show_mirroring headers.mirroring) headers.mapper;
 
   let chr = if headers.chr_size = 0 then
-    Array.create ~len:0x2000 0
+    Array.make 0x2000 0
   else
-    Array.slice rom (0x10 + headers.prg_size) (0x10 + headers.prg_size + headers.chr_size)
+    Array.sub rom (0x10 + headers.prg_size) headers.chr_size
   in
 
   {
     headers;
-    prg = Array.slice rom 0x10 (0x10 + headers.prg_size);
+    prg = Array.sub rom 0x10 headers.prg_size;
     chr;
-    ram = Array.create ~len:0x2000 0;
+    ram = Array.make 0x2000 0;
   }

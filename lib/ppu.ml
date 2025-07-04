@@ -1,4 +1,3 @@
-open Core
 open Stdint
 
 let all_palettes = [|
@@ -72,10 +71,10 @@ let make ~vram = {
   oam_addr = 0; mask = 0; control = 0;
   register = 0; sprite0_hit = false; sprite_overflow = false;
   nmi_occured = false; nmi_output = false; nmi_triggered = false; nmi_previous = false; nmi_delay = 0;
-  sprite_count = 0; buffer = 0; sprites = Array.create ~len:8 {pattern=0;position=0;priority=0;index=0};
+  sprite_count = 0; buffer = 0; sprites = Array.make 8 {pattern=0;position=0;priority=0;index=0};
   tile_data = Uint64.zero; name_table_b = 0; attr_table_b = 0; low_byte = 0; high_byte = 0;
   frame_content = Bigarray.Array1.create Bigarray.int8_unsigned Bigarray.c_layout (256 * 240 * 3);
-  oam = Array.create ~len:0x100 0;
+  oam = Array.make 0x100 0;
   vram;
 }
 
@@ -128,7 +127,7 @@ let read_register ppu = function
     ppu.oam.(ppu.oam_addr)
   | 0x2007 -> (* PPUDATA *)
     let value = load ppu ppu.v in
-    let value = if (ppu.v % 0x4000 < 0x3F00) then (
+    let value = if (ppu.v mod 0x4000 < 0x3F00) then (
       let buffer = ppu.buffer in
       ppu.buffer <- value;
       buffer
@@ -138,7 +137,7 @@ let read_register ppu = function
     ) in
     ppu.v <- (ppu.v + address_increment ppu);
     value
-  | _ as r -> failwith @@ sprintf "Cannot read PPU Register @ %04X" r
+  | _ as r -> failwith @@ Printf.sprintf "Cannot read PPU Register @ %04X" r
 
 let write_register ppu register value =
   ppu.register <- value;
@@ -155,7 +154,7 @@ let write_register ppu register value =
   | 0x2004 -> (* OAMDATA *)
     let address = ppu.oam_addr in
     ppu.oam.(address) <- value;
-    ppu.oam_addr <- (address + 1) % 0x100
+    ppu.oam_addr <- (address + 1) mod 0x100
   | 0x2005 -> (* PPUSCROLL *)
     if ppu.w then (
       ppu.t <- (ppu.t land 0xFFE0) lor (value lsr 3);
@@ -179,7 +178,7 @@ let write_register ppu register value =
   | 0x2007 -> (* PPUDATA *)
     store ppu ppu.v value;
     ppu.v <- (ppu.v + address_increment ppu)
-  | _ as r -> failwith @@ sprintf "Cannot write PPU Register @ %04X" r
+  | _ as r -> failwith @@ Printf.sprintf "Cannot write PPU Register @ %04X" r
 
 let show_sprites ppu =
   ppu.mask land 0x10 > 0
@@ -220,7 +219,7 @@ let store_tile_data ppu =
 
 let fetch_data ppu =
   ppu.tile_data <- Uint64.shift_left ppu.tile_data 4;
-  match ppu.cycles % 8 with
+  match ppu.cycles mod 8 with
   | 1 -> load_nametable ppu
   | 3 -> load_attribute_table ppu
   | 5 -> load_low_byte ppu
@@ -324,7 +323,7 @@ let sprite_pixel ppu =
       if not (offset < 0 || offset > 7) then (
         let offset = 7 - offset in
         let color = (sprite.pattern lsr (offset * 4)) land 0xF in
-        if not (color % 4 = 0) then
+        if not (color mod 4 = 0) then
           pixel := n, color
       );
     done;
@@ -345,8 +344,8 @@ let render_pixel ppu =
   let bg_color = background_pixel ppu in
   let sprite_idx, sprite_color = sprite_pixel ppu in
   (* TODO: x < 8 and y < 8 *)
-  let b = bg_color % 4 <> 0 in
-  let s = sprite_color % 4 <> 0 in
+  let b = bg_color mod 4 <> 0 in
+  let s = sprite_color mod 4 <> 0 in
 
   let color = match (b, s) with
   | false, false -> 0
@@ -364,7 +363,7 @@ let render_pixel ppu =
   in
 
   let palette = load ppu (0x3F00 + color) in
-  let palette_offset = if palette >= 16 && palette % 4 = 0 then 16 else 0 in
+  let palette_offset = if palette >= 16 && palette mod 4 = 0 then 16 else 0 in
   set_pixel ppu x y (all_palettes.((palette - palette_offset) land 0x3F))
 
 let tick ppu =
@@ -421,7 +420,7 @@ let step ppu =
       ppu.v <- (ppu.v land 0x841F) lor (ppu.t land 0x7BE0)
     );
     if render_sl then (
-      if fetch_cy && ppu.cycles % 8 = 0 then (
+      if fetch_cy && ppu.cycles mod 8 = 0 then (
         increment_x ppu
       );
       if ppu.cycles = 256 then (

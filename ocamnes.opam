@@ -9,7 +9,7 @@ homepage: "https://github.com/DuoSRX/ocamnes"
 bug-reports: "https://github.com/DuoSRX/ocamnes/issues"
 depends: [
   "dune" {>= "3.17"}
-  "core" {>= "0.17.0"}
+  "containers"
   "ppx_deriving"
   "tsdl"
   "stdint"

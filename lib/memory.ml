@@ -1,5 +1,3 @@
-open Core
-
 type t = {
   ppu : Ppu.t;
   mapper : Mapper.t;
@@ -9,14 +7,14 @@ type t = {
 let make ~mapper ~ppu =
   {
     ppu; mapper;
-    ram = Array.create ~len:0x800 0;
+    ram = Array.make 0x800 0;
   }
 
 let load m address =
   if address < 0x2000 then
     m.ram.(address land 0x7FF)
   else if (address lsr 13) = 1 then
-    Ppu.read_register m.ppu (0x2000 + address % 8)
+    Ppu.read_register m.ppu (0x2000 + address mod 8)
   else if address = 0x4016 then
     if Input.next_key () then 1 else 0
   else if address < 0x6000 then
@@ -34,7 +32,7 @@ let store m address value =
   if address < 0x2000 then
     m.ram.(address land 0x7FF) <- value
   else if (address lsr 13) = 1 then
-    Ppu.write_register m.ppu (0x2000 + address % 8) value
+    Ppu.write_register m.ppu (0x2000 + address mod 8) value
   else if address < 0x4000 then
     Ppu.store m.ppu address value
   else if address = 0x4014 then
